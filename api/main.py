@@ -397,7 +397,16 @@ def cipher_feed(limit: int = 20):
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         rows = conn.execute("""
-            SELECT agent_name, outcome, decision, timestamp
+            SELECT agent_name, outcome, timestamp,
+                   CASE WHEN json_valid(decision)
+                        THEN json_extract(decision, '$.action')
+                        ELSE outcome END as action,
+                   CASE WHEN json_valid(decision)
+                        THEN CAST(json_extract(decision, '$.confidence') AS INTEGER)
+                        ELSE 50 END as confidence,
+                   CASE WHEN json_valid(decision)
+                        THEN substr(json_extract(decision, '$.reasoning'), 1, 100)
+                        ELSE '' END as reasoning
             FROM decision_log
             ORDER BY timestamp DESC
             LIMIT ?
@@ -411,35 +420,29 @@ def cipher_feed(limit: int = 20):
         okb_price = float(snap["price_usd"]) if snap else 83.54
         conn.close()
 
+        import datetime
+        label_map = {
+            "executed_swap": "SWAP",
+            "get_quote": "QUOTE",
+            "observe": "OBSERVE",
+            "skill_sync": "LEARN",
+            "wait": "WAIT",
+            "risk_hold": "HOLD",
+            "error": "ERR",
+        }
         feed = []
         for row in rows:
             name = row["agent_name"]
             outcome = row["outcome"] or "wait"
-            ts_raw = row["timestamp"]
+            action = row["action"] or outcome
+            confidence = row["confidence"] or 50
+            # Strip nested JSON blobs from reasoning — keep plain text only
+            raw_reason = row["reasoning"] or ""
+            reasoning = raw_reason if not raw_reason.startswith("{") else ""
             try:
-                import datetime
-                ts = datetime.datetime.utcfromtimestamp(float(ts_raw)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                ts = datetime.datetime.utcfromtimestamp(float(row["timestamp"])).strftime("%Y-%m-%dT%H:%M:%SZ")
             except Exception:
-                ts = str(ts_raw)
-            try:
-                d = json.loads(row["decision"]) if row["decision"] else {}
-            except Exception:
-                d = {}
-
-            action = d.get("action", outcome)
-            confidence = d.get("confidence", 50)
-            reasoning = d.get("reasoning", "")[:80]
-
-            # Format a human-readable feed line
-            label_map = {
-                "executed_swap": "SWAP",
-                "get_quote": "QUOTE",
-                "observe": "OBSERVE",
-                "skill_sync": "LEARN",
-                "wait": "WAIT",
-                "risk_hold": "HOLD",
-                "error": "ERR",
-            }
+                ts = str(row["timestamp"])
             tag = label_map.get(action, action.upper()[:8])
             feed.append({
                 "ts": ts,
@@ -447,7 +450,7 @@ def cipher_feed(limit: int = 20):
                 "action": tag,
                 "outcome": outcome,
                 "confidence": confidence,
-                "reasoning": reasoning,
+                "reasoning": reasoning[:100],
                 "okb_price": okb_price,
             })
 
