@@ -32,7 +32,7 @@ PRO_MODEL   = "gemini-2.5-pro"
 # NVIDIA NIM / MiniMax M2.7 (cloud inference — 6-month free tier)
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 NIM_BASE       = "https://integrate.api.nvidia.com/v1"
-NIM_MODEL      = os.environ.get("NIM_MODEL", "MiniMaxAI/MiniMax-M2.7")
+NIM_MODEL      = os.environ.get("NIM_MODEL", "minimaxai/minimax-m2.7")
 
 
 # ─── Threat Gate (ported from Living Swarm arbiter-05) ────────────────────────
@@ -196,6 +196,9 @@ def _nim_generate(
         "Content-Type": "application/json",
     }
     resp = httpx.post(f"{NIM_BASE}/chat/completions", json=payload, headers=headers, timeout=60.0)
+    if resp.status_code == 404:
+        # Model not available on cloud API — may require local NIM deployment
+        raise EnvironmentError(f"NIM model {NIM_MODEL!r} not found on cloud API (404). Check model ID or use local deployment.")
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"].strip()
 
