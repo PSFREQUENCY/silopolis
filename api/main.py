@@ -406,7 +406,7 @@ def cipher_feed(limit: int = 20):
         # Fetch latest OKB price from market_snapshots
         snap = conn.execute("""
             SELECT price_usd FROM market_snapshots
-            WHERE token = 'OKB' ORDER BY timestamp DESC LIMIT 1
+            WHERE token_pair LIKE 'OKB%' ORDER BY timestamp DESC LIMIT 1
         """).fetchone()
         okb_price = float(snap["price_usd"]) if snap else 83.54
         conn.close()
@@ -415,7 +415,12 @@ def cipher_feed(limit: int = 20):
         for row in rows:
             name = row["agent_name"]
             outcome = row["outcome"] or "wait"
-            ts = row["timestamp"]
+            ts_raw = row["timestamp"]
+            try:
+                import datetime
+                ts = datetime.datetime.utcfromtimestamp(float(ts_raw)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                ts = str(ts_raw)
             try:
                 d = json.loads(row["decision"]) if row["decision"] else {}
             except Exception:
