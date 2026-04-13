@@ -63,20 +63,31 @@ class OnchainOSClient:
     Credentials sourced exclusively from environment variables.
     """
 
-    BASE_URL = "https://www.okx.com"
+    BASE_URL     = "https://www.okx.com"
+    API_V6_BASE  = "https://web3.okx.com"   # V6 OnchainOS endpoints
 
     def __init__(self) -> None:
-        self._api_key    = _load_required("ONCHAINOS_API_KEY")
-        self._secret     = _load_required("ONCHAINOS_SECRET_KEY")
-        self._passphrase = _load_required("ONCHAINOS_PASSPHRASE")
-        self._project_id = os.environ.get("ONCHAINOS_PROJECT_ID", "")
-        self._chain_id   = os.environ.get("XLAYER_CHAIN_ID", "196")
-        self._client     = httpx.Client(timeout=30.0)
+        # OnchainOS developer API key (from dev portal — different from exchange key)
+        self._onchainos_key = _load_required("ONCHAINOS_API_KEY")
+        # Exchange API key for HMAC-signed endpoints (optional)
+        self._exchange_key  = os.environ.get("OK_API_KEY", "")
+        self._secret        = os.environ.get("OK_SECRET_KEY", "")
+        self._passphrase    = os.environ.get("OKX_PASSPHRASE", "")
+        self._project_id    = os.environ.get("ONCHAINOS_PROJECT_ID", "")
+        self._chain_id      = os.environ.get("XLAYER_CHAIN_ID", "196")
+        self._client        = httpx.Client(timeout=30.0)
 
     def _headers(self, method: str, path: str, body: str = "") -> dict:
-        h = _okx_signature(
-            self._api_key, self._secret, self._passphrase, method, path, body
-        )
+        # Primary: OnchainOS developer key header
+        h: dict[str, str] = {
+            "OK-ACCESS-KEY": self._onchainos_key,
+            "Content-Type": "application/json",
+        }
+        # Add HMAC signature if exchange key is available (for authenticated endpoints)
+        if self._exchange_key and self._secret and self._passphrase:
+            h.update(_okx_signature(
+                self._exchange_key, self._secret, self._passphrase, method, path, body
+            ))
         if self._project_id:
             h["OK-ACCESS-PROJECT"] = self._project_id
         return h
@@ -133,6 +144,31 @@ class OnchainOSClient:
 
     # ─── DEX / Trade ──────────────────────────────────────────────────────────
 
+    def _get_v6(self, path: str, params: dict | None = None) -> Any:
+        """Call V6 OnchainOS endpoint (web3.okx.com)."""
+        qs = ""
+        if params:
+            qs = "?" + "&".join(f"{k}={v}" for k, v in params.items())
+        full_path = path + qs
+        resp = self._client.get(
+            self.API_V6_BASE + full_path,
+            headers={"OK-ACCESS-KEY": self._onchainos_key, "Content-Type": "application/json"},
+        )
+        return self._handle(resp)
+
+    # ─── Gas ──────────────────────────────────────────────────────────────────
+
+    def get_gas_price(self) -> dict:
+        return self._get(
+            "/api/v5/wallet/pre-transaction/gas-price",
+            params={"chainIndex": self._chain_id},
+        )
+
+    # ─── DEX / Trade (V6) ─────────────────────────────────────────────────────
+
+    def get_supported_chains(self) -> dict:
+        return self._get_v6("/api/v1/dex/aggregator/supported/chain")
+
     def get_swap_quote(
         self,
         from_token: str,
@@ -140,15 +176,15 @@ class OnchainOSClient:
         amount: str,
         slippage: str = "0.5",
     ) -> dict:
-        """Get a DEX swap quote via OnchainOS aggregator."""
-        return self._get(
-            "/api/v5/dex/aggregator/quote",
+        """Get a DEX swap quote via OnchainOS V6 aggregator."""
+        return self._get_v6(
+            "/api/v1/dex/aggregator/quote",
             params={
-                "chainId":       self._chain_id,
-                "fromTokenAddress": from_token,
-                "toTokenAddress":   to_token,
-                "amount":           amount,
-                "slippage":         slippage,
+                "chainId":              self._chain_id,
+                "fromTokenAddress":     from_token,
+                "toTokenAddress":       to_token,
+                "amount":               amount,
+                "slippage":             slippage,
             },
         )
 
@@ -160,56 +196,69 @@ class OnchainOSClient:
         user_address: str,
         slippage: str = "0.5",
     ) -> dict:
-        """Build a swap transaction (unsigned) ready for signing."""
-        return self._get(
-            "/api/v5/dex/aggregator/swap",
+        """Build a swap transaction via OnchainOS V6 aggregator."""
+        return self._get_v6(
+            "/api/v1/dex/aggregator/swap",
             params={
-                "chainId":           self._chain_id,
-                "fromTokenAddress":  from_token,
-                "toTokenAddress":    to_token,
-                "amount":            amount,
-                "userWalletAddress": user_address,
-                "slippage":          slippage,
+                "chainId":              self._chain_id,
+                "fromTokenAddress":     from_token,
+                "toTokenAddress":       to_token,
+                "amount":               amount,
+                "userWalletAddress":    user_address,
+                "slippage":             slippage,
             },
         )
 
     def broadcast_tx(self, signed_tx: str) -> dict:
-        """Broadcast a signed transaction via OnchainOS gateway."""
         return self._post(
             "/api/v5/wallet/pre-transaction/broadcast-transaction",
             {"signedTx": signed_tx, "chainIndex": self._chain_id},
         )
 
-    def get_gas_price(self) -> dict:
-        return self._get(
-            "/api/v5/wallet/pre-transaction/gas-price",
-            params={"chainIndex": self._chain_id},
-        )
-
-    # ─── Market Data ──────────────────────────────────────────────────────────
+    # ─── Market Data (V6) ─────────────────────────────────────────────────────
 
     def get_price(self, token_address: str) -> dict:
-        return self._get(
-            "/api/v5/market/index-price",
+        return self._get_v6(
+            "/api/v1/market/price",
             params={"chainIndex": self._chain_id, "tokenContractAddress": token_address},
         )
 
     def get_token_ranking(self, limit: int = 20) -> dict:
-        return self._get(
-            "/api/v5/market/token/ranking",
+        return self._get_v6(
+            "/api/v1/market/token/ranking",
             params={"chainIndex": self._chain_id, "limit": str(limit)},
+        )
+
+    # ─── Wallet / Balance (V6) ────────────────────────────────────────────────
+
+    def get_total_value(self, address: str) -> dict:
+        return self._get_v6(
+            "/api/v1/wallet/asset/total-value-by-address",
+            params={"address": address, "chains": self._chain_id},
+        )
+
+    def get_token_balances(self, address: str) -> dict:
+        return self._get_v6(
+            "/api/v1/wallet/asset/all-token-balances-by-address",
+            params={"address": address, "chains": self._chain_id},
+        )
+
+    def get_tx_history(self, address: str, limit: int = 20) -> dict:
+        return self._get_v6(
+            "/api/v1/wallet/post-transaction/transactions-by-address",
+            params={"address": address, "chainIndex": self._chain_id, "limit": str(limit)},
         )
 
     # ─── x402 Payments ────────────────────────────────────────────────────────
 
     def get_payment_schemes(self) -> dict:
-        return self._get("/api/v5/payments/info/schemes")
+        return self._get_v6("/api/v1/payments/info/schemes")
 
     def submit_payment(self, payment_payload: dict) -> dict:
         return self._post("/api/v5/payments/transaction/submit", payment_payload)
 
     def verify_payment(self, tx_hash: str) -> dict:
-        return self._get(
-            "/api/v5/payments/transaction/verify",
+        return self._get_v6(
+            "/api/v1/payments/transaction/verify",
             params={"txHash": tx_hash, "chainIndex": self._chain_id},
         )
