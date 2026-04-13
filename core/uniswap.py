@@ -110,15 +110,32 @@ def _xlayer_swap_quote(
     slippage_pct = str(slippage_bps / 100)
     raw = onchainos.swap_quote(from_token, to_token, amount, chain="xlayer")
 
+    # CLI may return list or dict — normalise to dict
+    if isinstance(raw, list):
+        raw = raw[0] if raw else {}
+    if not isinstance(raw, dict):
+        logger.warning("X Layer swap quote: unexpected type %s", type(raw))
+        return None
+
     if not raw.get("ok", True) is False and "error" not in raw:
         # Parse CLI output (structure varies, handle both ok/data and direct)
         data = raw.get("data", raw)
+        if isinstance(data, list):
+            data = data[0] if data else {}
         amount_out = str(data.get("toTokenAmount") or data.get("amount_out") or "0")
         price_impact = float(data.get("priceImpactPercentage") or data.get("price_impact") or 0)
         router_name = data.get("dex", data.get("router", "PotatoSwap"))
         calldata_raw = onchainos.swap_calldata(from_token, to_token, amount,
                                                chain="xlayer", slippage=slippage_pct)
-        tx_data = calldata_raw.get("data", {}).get("data", "0x")
+        if isinstance(calldata_raw, list):
+            calldata_raw = calldata_raw[0] if calldata_raw else {}
+        if not isinstance(calldata_raw, dict):
+            calldata_raw = {}
+        tx_data = calldata_raw.get("data", {})
+        if isinstance(tx_data, dict):
+            tx_data = tx_data.get("data", "0x")
+        elif not isinstance(tx_data, str):
+            tx_data = "0x"
         return SwapQuote(
             from_token=from_token,
             to_token=to_token,

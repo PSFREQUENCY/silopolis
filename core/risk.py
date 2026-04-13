@@ -218,8 +218,11 @@ class RiskGovernor:
         return round(min(base, remaining_daily), 6)
 
     def check_confidence(self, confidence: int) -> bool:
-        """Return True if confidence meets the tier's minimum."""
-        return confidence >= self.tier.min_confidence
+        """Return True if confidence meets the tier's minimum.
+        SILOPOLIS_MIN_CONFIDENCE env var overrides the tier floor downward."""
+        env_min = int(os.environ.get("SILOPOLIS_MIN_CONFIDENCE", "100").split()[0])
+        effective_min = min(self.tier.min_confidence, env_min)
+        return confidence >= effective_min
 
     def record_trade(self, spent_okb: float, profit_okb: float) -> None:
         """Record a completed trade outcome."""

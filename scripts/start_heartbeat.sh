@@ -9,7 +9,7 @@ ROOT="$SCRIPT_DIR/.."
 
 echo "╔══════════════════════════════════════════════════╗"
 echo "║         SILOPOLIS HEARTBEAT DAEMON               ║"
-echo "║         3 cycles per day · X Layer               ║"
+echo "║         12 cycles per day · X Layer             ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 
@@ -23,9 +23,11 @@ cd "$ROOT"
 # Load .env
 export $(grep -v '^#' .env | grep -v '^$' | xargs) 2>/dev/null || true
 
-echo "[SILOPOLIS] Starting heartbeat daemon (interval: 8h = 3 per day)..."
+INTERVAL="${SILOPOLIS_HEARTBEAT_INTERVAL:-7200}"
+CYCLES_PER_DAY=$((86400 / INTERVAL))
+echo "[SILOPOLIS] Starting heartbeat daemon (interval: ${INTERVAL}s = ${CYCLES_PER_DAY}/day)..."
 echo "[SILOPOLIS] Logs: /tmp/silopolis-heartbeat.log"
 echo "[SILOPOLIS] Press Ctrl+C to stop."
 echo ""
 
-python3 -m core.heartbeat --forever --interval 28800 2>&1 | tee /tmp/silopolis-heartbeat.log
+python3 -m core.heartbeat --forever --interval "$INTERVAL" 2>&1 | tee /tmp/silopolis-heartbeat.log

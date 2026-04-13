@@ -34,8 +34,10 @@ if _env_path.exists():
             _line = _line.strip()
             if _line and not _line.startswith("#") and "=" in _line:
                 _k, _, _v = _line.partition("=")
-                if _k.strip() not in os.environ:
-                    os.environ[_k.strip()] = _v.strip()
+                # Strip inline comments (e.g. "7200  # comment")
+                _v = _v.split("#")[0].strip()
+                if _k.strip() not in os.environ and _v:
+                    os.environ[_k.strip()] = _v
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -94,7 +96,7 @@ AGENT_ROSTER = [
 WALLET_ADDRESS = os.environ.get("AGENT_WALLET_ADDRESS", "0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d")
 # 12 heartbeats/day = every 2 hours (for active hackathon period)
 # Set SILOPOLIS_HEARTBEAT_INTERVAL=28800 in .env to revert to 8h (3x/day)
-HEARTBEAT_INTERVAL_SEC = int(os.environ.get("SILOPOLIS_HEARTBEAT_INTERVAL", str(2 * 3600)))
+HEARTBEAT_INTERVAL_SEC = int(os.environ.get("SILOPOLIS_HEARTBEAT_INTERVAL", str(2 * 3600)).split()[0])
 
 
 # ─── Observation Phase ────────────────────────────────────────────────────────
@@ -172,7 +174,9 @@ def observe(heartbeat_id: str) -> dict:
     # Wallet balances
     try:
         bal = onchainos.portfolio_balances()
-        if not bal.get("error"):
+        if isinstance(bal, list):
+            obs["wallet"] = {"tokens": bal}
+        elif isinstance(bal, dict) and not bal.get("error"):
             obs["wallet"] = bal.get("data", bal)
     except Exception as e:
         logger.warning("[observe] Balance fetch failed: %s", e)
