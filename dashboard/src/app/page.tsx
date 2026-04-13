@@ -290,6 +290,88 @@ function AgentCard({ agent, selected, onClick }: { agent: Agent; selected: boole
   );
 }
 
+// ─── Risk Panel ───────────────────────────────────────────────────────────────
+
+interface RiskStatus {
+  tier: string; description: string; okb_balance: number;
+  max_trade_okb: number; daily_budget_okb: number; daily_spent_okb: number;
+  total_trades: number; win_rate_pct: number; total_profit_okb: number;
+  consecutive_losses: number; can_trade: boolean; is_paused: boolean;
+}
+
+const TIER_COLORS: Record<string, string> = {
+  SEED: "#6B7280", MICRO: "#60A5FA", SMALL: "#34D399",
+  MEDIUM: "#FBBF24", ACTIVE: "#DAA520",
+};
+
+function RiskPanel({ apiBase }: { apiBase: string }) {
+  const [risk, setRisk] = useState<RiskStatus | null>(null);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const r = await fetch(`${apiBase}/api/risk`);
+        if (r.ok) setRisk(await r.json());
+      } catch {}
+    };
+    load();
+    const iv = setInterval(load, 60_000);
+    return () => clearInterval(iv);
+  }, [apiBase]);
+
+  if (!risk) return null;
+  const tc = TIER_COLORS[risk.tier] ?? "#6B7280";
+  const dailyPct = risk.daily_budget_okb > 0
+    ? Math.min(100, (risk.daily_spent_okb / risk.daily_budget_okb) * 100) : 0;
+
+  return (
+    <div className="p-5 relative overflow-hidden" style={{ background: "#080604", border: "1px solid #2A1E0A" }}>
+      <ScanLine />
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="text-xs tracking-[0.2em] mb-1" style={{ color: "#4A3A22" }}>VAULT RISK PROFILE</div>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-black font-mono tracking-widest" style={{ color: tc }}>{risk.tier}</span>
+              {risk.is_paused && <span className="text-xs font-mono animate-pulse" style={{ color: "#F87171" }}>PAUSED</span>}
+              {risk.can_trade && !risk.is_paused && <span className="text-xs font-mono" style={{ color: "#34D399" }}>● LIVE</span>}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-black font-mono" style={{ color: tc }}>
+              {risk.okb_balance.toFixed(6)}
+            </div>
+            <div className="text-xs font-mono" style={{ color: "#4A3A22" }}>OKB VAULT</div>
+          </div>
+        </div>
+        <p className="text-xs mb-4" style={{ color: "#4A3A22" }}>{risk.description}</p>
+        {/* Daily budget progress */}
+        <div className="mb-3">
+          <div className="flex justify-between text-xs font-mono mb-1" style={{ color: "#4A3A22" }}>
+            <span>DAILY BUDGET</span>
+            <span style={{ color: tc }}>{risk.daily_spent_okb.toFixed(6)} / {risk.daily_budget_okb.toFixed(6)} OKB</span>
+          </div>
+          <div className="h-1 w-full" style={{ background: "#1A1208" }}>
+            <div className="h-full transition-all" style={{ width: `${dailyPct}%`, background: tc }} />
+          </div>
+        </div>
+        {/* Stats grid */}
+        <div className="grid grid-cols-3 gap-3 text-center">
+          {[
+            { label: "TRADES",   value: risk.total_trades.toString(),      color: "#9A8060" },
+            { label: "WIN RATE", value: `${risk.win_rate_pct.toFixed(0)}%`, color: risk.win_rate_pct >= 50 ? "#34D399" : "#F87171" },
+            { label: "PROFIT",   value: `+${risk.total_profit_okb.toFixed(6)}`, color: "#DAA520" },
+          ].map(s => (
+            <div key={s.label}>
+              <div className="text-sm font-black font-mono" style={{ color: s.color }}>{s.value}</div>
+              <div className="text-xs mt-0.5 font-mono" style={{ color: "#3A2C16" }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SilopolisPage() {
@@ -582,6 +664,11 @@ export default function SilopolisPage() {
           >
             ↻ SYNC VAULT
           </button>
+        </div>
+
+        {/* Risk Panel */}
+        <div className="mb-8">
+          <RiskPanel apiBase={API_BASE} />
         </div>
 
         {/* Mastery tier legend */}

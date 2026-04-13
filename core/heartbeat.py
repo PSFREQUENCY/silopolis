@@ -50,7 +50,11 @@ logger = logging.getLogger("silopolis.heartbeat")
 from core import memory
 from core.cognition import SwarmFiCognition, assess_threat
 from core.uniswap import get_swap_quote, suggest_lp_strategy, SwapQuote
+from core.risk import RiskGovernor
 from onchainos import cli as onchainos
+
+# Global risk governor — single source of truth for all spending
+_risk = RiskGovernor()
 
 # ─── Agent definitions (name, type, bootstrap skills) ─────────────────────────
 
@@ -279,28 +283,45 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str) -> dict:
             return {"outcome": "blocked", "reason": threat.reasoning, "tx_hash": None}
         decision["_meta"]["threat"] = {"score": threat.score, "level": threat.level}
 
-    # Confidence threshold — lower bar drives more on-chain activity for mastery building
-    min_confidence = int(os.environ.get("SILOPOLIS_MIN_CONFIDENCE", "30"))
-    if confidence < min_confidence:
-        logger.info("[act] %s — waiting (confidence=%d < %d)", name, confidence, min_confidence)
-        return {"outcome": "wait", "reason": f"low confidence {confidence}", "tx_hash": None}
+    # Risk Governor: check tier confidence threshold
+    if not _risk.check_confidence(confidence):
+        logger.info("[act] %s — below tier confidence floor (%d < %d)",
+                    name, confidence, _risk.tier.min_confidence)
+        return {"outcome": "wait", "reason": f"confidence {confidence} below tier floor", "tx_hash": None}
 
-    logger.info("[act] %s → %s (confidence=%d)", name, action, confidence)
+    logger.info("[act] %s → %s (confidence=%d, tier=%s)", name, action, confidence, _risk.tier.name)
 
     if action == "swap":
-        from_tok = params.get("from_token", "OKB")
-        to_tok   = params.get("to_token", "USDT")
-        amount   = params.get("amount", "0.1")
-        # LIVE MODE: onchainos CLI signs and broadcasts via TEE Agentic Wallet
-        # Flip to dry_run=True to simulate without broadcasting
+        # Risk Governor gate — checks balance, daily budget, pause state
+        if not _risk.can_trade:
+            status = _risk.status_dict()
+            return {"outcome": "risk_hold", "reason": status["description"],
+                    "tier": status["tier"], "tx_hash": None}
+
+        from_tok  = params.get("from_token", "OKB")
+        to_tok    = params.get("to_token", "USDT")
+        # Use risk-governed trade size — never exceed safe limits
+        safe_amount = str(_risk.get_trade_size())
+        if safe_amount == "0.0" or float(safe_amount) == 0:
+            return {"outcome": "risk_hold", "reason": "trade size zero in current tier", "tx_hash": None}
+
         from core.uniswap import execute_swap
         live = os.environ.get("SILOPOLIS_LIVE_TRADING", "false").lower() == "true"
-        result = execute_swap(from_tok, to_tok, amount, dry_run=not live)
+        result = execute_swap(from_tok, to_tok, safe_amount, dry_run=not live)
+        if live and result.success:
+            # Record outcome — profit is estimated from amount_out
+            try:
+                profit_okb = float(result.amount_out) * 0.001 - float(safe_amount)
+            except Exception:
+                profit_okb = 0.0
+            _risk.record_trade(float(safe_amount), profit_okb)
         outcome_label = "executed_swap" if (live and result.success) else "simulated_swap"
         return {
             "outcome": outcome_label,
             "tx_hash": result.tx_hash,
+            "amount": safe_amount,
             "amount_out": result.amount_out,
+            "tier": _risk.tier.name,
             "live": live,
         }
 
@@ -438,6 +459,12 @@ def run_heartbeat() -> dict:
         except Exception as e:
             logger.error("[%s] cycle error: %s", name, e, exc_info=True)
             errors += 1
+
+    # Log risk status after each cycle
+    risk_status = _risk.status_dict()
+    logger.info("[risk] Tier=%s | Balance=%.6f OKB | WinRate=%.1f%% | Profit=%.6f OKB",
+                risk_status["tier"], risk_status["okb_balance"],
+                risk_status["win_rate_pct"], risk_status["total_profit_okb"])
 
     # Determine overall market sentiment
     from collections import Counter

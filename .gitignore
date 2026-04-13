@@ -50,3 +50,4 @@ logs/
 *.db
 *.sqlite
 data/
+.vercel

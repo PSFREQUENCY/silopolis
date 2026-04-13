@@ -18,6 +18,7 @@ from core.swarm import Swarm
 from core.agent import SiloAgent, Skill
 from core.agents.trader import TraderAgent
 from core import memory as mem
+from core.risk import RiskGovernor as _RiskGovernor
 
 logging.basicConfig(level=os.environ.get("SILOPOLIS_LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
@@ -227,6 +228,16 @@ def swarm_knowledge(limit: int = 50):
         return {"knowledge": mem.get_swarm_knowledge(min_confidence=0.3, limit=limit)}
     except Exception as e:
         return {"knowledge": [], "error": str(e)}
+
+
+@app.get("/api/risk")
+def risk_status():
+    """Live vault risk profile — tier, balance, win rate, profit capture."""
+    try:
+        rg = _RiskGovernor()
+        return rg.status_dict()
+    except Exception as e:
+        return {"error": str(e), "tier": "UNKNOWN"}
 
 
 @app.get("/api/contracts")
