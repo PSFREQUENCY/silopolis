@@ -99,6 +99,13 @@ WALLET_ADDRESS = os.environ.get("AGENT_WALLET_ADDRESS", "0x872c4c0c5648126a3ac5c
 HEARTBEAT_INTERVAL_SEC = int(os.environ.get("SILOPOLIS_HEARTBEAT_INTERVAL", str(2 * 3600)).split()[0])
 
 
+# Token addresses on X Layer (Chain 196)
+_XLAYER_TOKENS = {
+    "OKB":  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",  # native
+    "USDT": "0x1e4a5963abfd975d8c9021ce480b42188849d41d",
+    "USDC": "0x74b7f16337b8972027f6196a17a631ac6de26d22",
+}
+
 # ─── Observation Phase ────────────────────────────────────────────────────────
 
 def observe(heartbeat_id: str) -> dict:
@@ -113,71 +120,74 @@ def observe(heartbeat_id: str) -> dict:
         "recent_decisions": [],
     }
 
-    # Market prices via OnchainOS
-    for symbol in ["OKB", "USDT", "USDC"]:
+    # Market prices via OnchainOS — use contract addresses
+    for symbol, address in _XLAYER_TOKENS.items():
         try:
-            price_raw = onchainos.market_price(symbol)
-            # CLI may return list or dict — handle both
-            if isinstance(price_raw, list):
-                data = price_raw[0] if price_raw else {}
-            else:
-                data = price_raw.get("data", price_raw) if isinstance(price_raw, dict) else {}
+            price_raw = onchainos.market_price(address)
+            data = price_raw.get("data", []) if isinstance(price_raw, dict) else price_raw
             if isinstance(data, list):
                 data = data[0] if data else {}
-            price = float(data.get("price") or data.get("current_price") or data.get("lastPrice") or 0)
-            if price > 0 or data:
-                obs["market"][symbol] = {"price_usd": price, "raw": data}
+            price = float(data.get("price") or 0)
+            if price > 0:
+                obs["market"][symbol] = {"price_usd": price, "address": address}
+                logger.info("[observe] %s = $%.4f", symbol, price)
                 memory.save_market_snapshot(
                     token_pair=f"{symbol}/USD",
-                    price_usd=price if price > 0 else None,
-                    volume_24h=float(data.get("volume24h") or data.get("vol24h") or 0),
-                    trend=data.get("trend") or data.get("priceChangePercent24h", ""),
+                    price_usd=price,
+                    volume_24h=0,
+                    trend="",
                     data=data,
                 )
         except Exception as e:
             logger.warning("[observe] Price fetch %s failed: %s", symbol, e)
 
-    # Try market signals (trending tokens)
+    # Market signals — smart money / whale activity on X Layer
     try:
         signals = onchainos.market_signals()
-        if isinstance(signals, dict):
-            data = signals.get("data", signals)
-        elif isinstance(signals, list):
-            data = signals
-        else:
-            data = {}
+        data = signals.get("data", []) if isinstance(signals, dict) else (signals if isinstance(signals, list) else [])
         if data:
-            obs["market"]["signals"] = data if isinstance(data, list) else [data]
+            obs["market"]["signals"] = data[:5]  # top 5 signals
+            logger.info("[observe] %d market signals fetched", len(data))
     except Exception as e:
         logger.warning("[observe] Market signals failed: %s", e)
 
-    # Swap signal: OKB→USDT quote
+    # OKB→USDT swap quote — measures liquidity depth
     try:
-        quote = get_swap_quote("OKB", "USDT", "1", chain_id=196)
-        if quote:
+        quote = get_swap_quote("OKB", "USDT", "0.001", chain_id=196)
+        if quote and quote.amount_out and quote.amount_out != "0":
+            # amount_out is in raw USDT units (6 decimals) — convert
+            try:
+                raw_amount = float(quote.amount_out)
+                # If very large (>1000), it's raw units → divide by 1e6
+                price_usdt = raw_amount / 1e6 if raw_amount > 1000 else raw_amount
+                price_usdt = price_usdt / 0.001  # normalise to price per OKB
+            except ValueError:
+                price_usdt = 0
             obs["market"]["OKB_USDT_QUOTE"] = {
-                "amount_out": quote.amount_out,
+                "price_per_okb": round(price_usdt, 4),
+                "amount_out_raw": quote.amount_out,
                 "price_impact": quote.price_impact_pct,
                 "router": quote.router,
             }
-            memory.save_market_snapshot(
-                token_pair="OKB/USDT",
-                price_usd=float(quote.amount_out) if quote.amount_out.replace(".", "").isdigit() else None,
-                volume_24h=None,
-                trend=None,
-                data={"quote": quote.amount_out, "router": quote.router},
-                source="onchainos-quote",
-            )
+            logger.info("[observe] OKB/USDT quote: $%.4f per OKB", price_usdt)
     except Exception as e:
         logger.warning("[observe] OKB/USDT quote failed: %s", e)
 
-    # Wallet balances
+    # Wallet balance via `wallet balance`
     try:
         bal = onchainos.portfolio_balances()
-        if isinstance(bal, list):
-            obs["wallet"] = {"tokens": bal}
-        elif isinstance(bal, dict) and not bal.get("error"):
-            obs["wallet"] = bal.get("data", bal)
+        if isinstance(bal, dict) and bal.get("ok"):
+            details = bal.get("data", {}).get("details", [])
+            tokens = []
+            for acc in details:
+                tokens.extend(acc.get("tokenAssets", []))
+            obs["wallet"] = {
+                "tokens": tokens,
+                "okb_balance": next((float(t["balance"]) for t in tokens if t.get("symbol") == "OKB"), 0),
+                "usd_value": sum(float(t.get("usdValue", 0)) for t in tokens),
+            }
+            logger.info("[observe] Wallet: %.6f OKB ($%.4f USD)",
+                        obs["wallet"]["okb_balance"], obs["wallet"]["usd_value"])
     except Exception as e:
         logger.warning("[observe] Balance fetch failed: %s", e)
 
@@ -219,23 +229,51 @@ def reason(agent_def: dict, observation: dict) -> dict:
             ]
             decision_ctx = f"\n{name}'s recent decisions:\n" + "\n".join(d_items)
 
-    prompt = f"""You are {name} ({agent_def['type']} agent) in the SILOPOLIS swarm.
-Focus area: {focus}
+    # Risk governor context
+    t = _risk.tier
+    trade_size = _risk.get_trade_size()
+    can_trade = _risk.can_trade
+    vault_ctx = (
+        f"Vault tier: {t.name} | Balance: {_risk.state.okb_balance:.6f} OKB | "
+        f"Max trade: {trade_size:.6f} OKB | Can trade: {can_trade} | "
+        f"Daily spent: {_risk.state.daily_spent_okb:.6f}/{t.max_daily_okb:.6f} OKB | "
+        f"Win rate: {_risk.state.win_rate*100:.1f}% ({_risk.state.total_trades} trades)"
+    )
+
+    okb_price = observation['market'].get('OKB', {}).get('price_usd', 0)
+    quote = observation['market'].get('OKB_USDT_QUOTE', {})
+
+    prompt = f"""You are {name} ({agent_def['type']} agent) in SILOPOLIS — an autonomous on-chain trading arena on X Layer.
+Focus: {focus}
 Wallet: {WALLET_ADDRESS}
 
-Current market data:
-{json.dumps(observation['market'], indent=2)}
+=== VAULT STATUS ===
+{vault_ctx}
+
+=== LIVE MARKET DATA ===
+OKB price: ${okb_price:.4f} USD
+OKB/USDT quote (live): ${quote.get('price_per_okb', okb_price):.4f} per OKB
+Market signals: {len(observation['market'].get('signals', []))} active
 
 {knowledge_ctx}
 {decision_ctx}
 
-Based on this data and your focus area, determine the optimal action for this heartbeat cycle.
-Consider: market conditions, your past decisions, swarm knowledge, and budget constraints.
+=== INSTRUCTIONS ===
+You MUST take an action this cycle. "wait" is only valid if trading is paused or there is a clear risk signal.
+If can_trade=True and balance > 0.001 OKB:
+  - TRADER: evaluate a micro-swap (OKB→USDT or USDT→OKB) to capture spread
+  - ANALYST: assess LP opportunity or market trend signal
+  - SKILL-BROKER: attempt a skill-sync or x402 relic acquisition
+  - GUARD: run a security check and decide if the current threat level blocks trading
+  - SCRIBE: record patterns and update knowledge graph
 
-Return a JSON decision:
+For a "swap" action, params MUST include:
+  {{"from_token": "OKB", "to_token": "USDT", "amount": "{trade_size:.6f}", "dry_run": false}}
+
+Return ONLY valid JSON (no markdown, no code blocks):
 {{
   "action": "swap|lp|skill_sync|observe|wait",
-  "reasoning": "...",
+  "reasoning": "one concise sentence explaining why",
   "confidence": 0-100,
   "params": {{}},
   "knowledge_to_record": [
@@ -245,7 +283,11 @@ Return a JSON decision:
 
     cog = SwarmFiCognition(
         agent_name=name,
-        system_context=f"You are {name}, an autonomous SILOPOLIS agent on X Layer. Be precise and structured.",
+        system_context=(
+            f"You are {name}, an autonomous trading agent on X Layer. "
+            "You MUST choose decisive actions — 'wait' is a last resort. "
+            "Return only valid JSON with no markdown wrapping."
+        ),
         max_tokens=1024,
     )
 

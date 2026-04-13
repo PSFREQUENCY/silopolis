@@ -86,11 +86,8 @@ def wallet_xlayer_address() -> str:
 
 
 def portfolio_balances(chain: str = "xlayer") -> dict:
-    """Get all token balances for the active wallet on a chain."""
-    addr = wallet_xlayer_address()
-    if not addr:
-        return {"ok": False, "error": "no wallet address"}
-    return _run("portfolio", "all-balances", "--address", addr, "--chains", "196", "--chain", chain)
+    """Get all token balances for the active agentic wallet."""
+    return _run("wallet", "balance")
 
 
 # ─── DEX / Swap ───────────────────────────────────────────────────────────────
@@ -153,18 +150,37 @@ def swap_calldata(
 # ─── Market ───────────────────────────────────────────────────────────────────
 
 def market_price(token: str, chain: str = "xlayer") -> dict:
-    """Get current price for a token symbol or address."""
-    return _run("dex-market", "price", "--token", token, "--chain", chain)
+    """Get current price for a token contract address.
+    Use native address 0xeeee...eeee for OKB (chain native token).
+    """
+    return _run("market", "price", "--address", token, "--chain", chain)
 
 
 def market_signals(chain: str = "xlayer") -> dict:
-    """Get market signals for trend/momentum analysis."""
-    return _run("dex-signal", "trending", "--chain", chain)
+    """Get smart money / KOL / whale signal list for a chain."""
+    return _run("signal", "list", "--chain", chain)
+
+
+def wallet_dex_history(address: str = "", chain: str = "xlayer", limit: int = 20) -> dict:
+    """Get DEX transaction history for the agentic wallet."""
+    import time
+    if not address:
+        address = wallet_xlayer_address() or ""
+    if not address:
+        return {"ok": False, "error": "no wallet address"}
+    end_ms = str(int(time.time() * 1000))
+    begin_ms = str(int((time.time() - 30 * 86400) * 1000))  # last 30 days
+    return _run("market", "portfolio-dex-history",
+                "--address", address,
+                "--chain", chain,
+                "--begin", begin_ms,
+                "--end", end_ms,
+                "--limit", str(limit))
 
 
 def token_search(symbol: str, chain: str = "xlayer") -> dict:
     """Search for a token by symbol on a chain."""
-    return _run("dex-token", "search", "--query", symbol, "--chains", chain)
+    return _run("token", "info", "--symbol", symbol, "--chain", chain)
 
 
 # ─── x402 Payments ────────────────────────────────────────────────────────────
