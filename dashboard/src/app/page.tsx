@@ -18,6 +18,7 @@ const HeartbeatTimer = dynamic(() => import("../components/HeartbeatTimer"), { s
 const ParticleArena = dynamic(() => import("../components/ParticleArena"), { ssr: false });
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+const FETCH_HEADERS: HeadersInit = { "Bypass-Tunnel-Reminder": "true" };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -309,7 +310,7 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await fetch(`${apiBase}/api/risk`);
+        const r = await fetch(`${apiBase}/api/risk`, { headers: FETCH_HEADERS });
         if (r.ok) setRisk(await r.json());
       } catch {}
     };
@@ -383,9 +384,10 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     const load = async () => {
       try {
+        const opts = { headers: FETCH_HEADERS };
         const [r, k] = await Promise.all([
-          fetch(`${apiBase}/api/risk`).then(r => r.json()),
-          fetch(`${apiBase}/api/knowledge?limit=8`).then(r => r.json()),
+          fetch(`${apiBase}/api/risk`, opts).then(r => r.json()),
+          fetch(`${apiBase}/api/knowledge?limit=8`, opts).then(r => r.json()),
         ]);
         if (!r.error) setRisk(r);
         if (k.knowledge) setKnowledge(k.knowledge);
@@ -487,7 +489,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await fetch(`${apiBase}/api/heartbeat/status`);
+        const r = await fetch(`${apiBase}/api/heartbeat/status`, { headers: FETCH_HEADERS });
         if (r.ok) {
           const data = await r.json();
           if (data.last_heartbeat) {
@@ -588,9 +590,10 @@ export default function SilopolisPage() {
 
   const refresh = useCallback(async () => {
     try {
+      const opts = { headers: FETCH_HEADERS };
       const [lb, st] = await Promise.all([
-        fetch(`${API_BASE}/api/leaderboard`).then(r => r.json()),
-        fetch(`${API_BASE}/api/status`).then(r => r.json()),
+        fetch(`${API_BASE}/api/leaderboard`, opts).then(r => r.json()),
+        fetch(`${API_BASE}/api/status`, opts).then(r => r.json()),
       ]);
       const list: Agent[] = lb.leaderboard ?? DEMO_AGENTS;
       setAgents(list);
@@ -616,8 +619,11 @@ export default function SilopolisPage() {
   const triggerCycle = async () => {
     setCycleRunning(true);
     try {
-      await fetch(`${API_BASE}/api/swarm/cycle`, { method: "POST" });
-      await refresh();
+      await fetch(`${API_BASE}/api/swarm/cycle`, {
+        method: "POST",
+        headers: FETCH_HEADERS,
+      });
+      setTimeout(refresh, 6000); // wait 6s for cycle to start, then refresh
     } finally { setCycleRunning(false); }
   };
 
