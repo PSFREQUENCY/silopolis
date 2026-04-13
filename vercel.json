@@ -1,0 +1,36 @@
+{
+  "version": 2,
+  "name": "silopolis",
+  "builds": [
+    {
+      "src": "api/main.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb",
+        "runtime": "python3.11"
+      }
+    },
+    {
+      "src": "dashboard/package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/main.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "dashboard/$1"
+    }
+  ],
+  "env": {
+    "SILOPOLIS_LOG_LEVEL": "INFO"
+  },
+  "functions": {
+    "api/main.py": {
+      "maxDuration": 60
+    }
+  }
+}

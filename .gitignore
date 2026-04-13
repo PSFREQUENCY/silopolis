@@ -1,0 +1,52 @@
+# Secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+secrets/
+~/.config/moltbook/
+
+# Private keys & wallets
+keystore/
+wallet.json
+mnemonic.txt
+seed.txt
+private_key*
+
+# Build artifacts
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+.venv/
+venv/
+
+# Foundry/Hardhat
+out/
+cache/
+artifacts/
+typechain-types/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# DB / state
+*.db
+*.sqlite
+data/
