@@ -6,3 +6,8 @@ pydantic>=2.0.0
 web3>=7.0.0
 eth-account>=0.13.0
 python-dotenv>=1.0.0
+# Uniswap / EVM
+uniswap-universal-router-decoder>=0.7.0
+eth-abi>=5.0.0
+# Persistence
+# (sqlite3 is stdlib — no extra install needed)

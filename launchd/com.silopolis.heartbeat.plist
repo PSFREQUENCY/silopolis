@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SILOPOLIS macOS LaunchAgent — 3 heartbeats/day (every 8 hours)
+  No cloud, no Docker needed. Runs while your Mac is on.
+
+  Install:
+    cp launchd/com.silopolis.heartbeat.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.silopolis.heartbeat.plist
+
+  View logs:
+    tail -f /tmp/silopolis-heartbeat.log
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.silopolis.heartbeat.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.silopolis.heartbeat</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/funmen/silopolis/core/heartbeat.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/funmen/silopolis</string>
+
+    <!-- Fire at 00:00, 08:00, 16:00 every day -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Hour</key><integer>0</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key><integer>8</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+    </array>
+
+    <!-- Logs -->
+    <key>StandardOutPath</key>
+    <string>/tmp/silopolis-heartbeat.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/silopolis-heartbeat.err</string>
+
+    <!-- Keep alive on crash -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Run even if not logged in (requires launchctl bootstrap) -->
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

@@ -3,16 +3,89 @@
 @tailwind utilities;
 
 :root {
-  --background: #030712;
-  --foreground: #f9fafb;
+  --background: #050402;
+  --foreground: #C8A850;
+  --gold: #DAA520;
+  --ancient: #B8860B;
+  --cipher: #34D399;
+  --void: #0A0806;
 }
 
+/* ── Base ─────────────────────────────────────────────────────────────────── */
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: "JetBrains Mono", "Fira Code", "Courier New", monospace;
+  -webkit-font-smoothing: antialiased;
 }
 
-* {
-  box-sizing: border-box;
+* { box-sizing: border-box; }
+
+/* ── Selection ────────────────────────────────────────────────────────────── */
+::selection {
+  background: #B8860B40;
+  color: #FFD700;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #050402; }
+::-webkit-scrollbar-thumb { background: #B8860B40; border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: #B8860B80; }
+
+/* ── Animations ───────────────────────────────────────────────────────────── */
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  30%       { opacity: 0.88; }
+  50%       { opacity: 0.96; }
+  70%       { opacity: 0.90; }
+}
+
+@keyframes scandown {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(100vh); }
+}
+
+@keyframes pulse-gold {
+  0%, 100% { box-shadow: 0 0 8px #B8860B20; }
+  50%       { box-shadow: 0 0 24px #B8860B60; }
+}
+
+@keyframes cipher-in {
+  from { opacity: 0; letter-spacing: 0.5em; filter: blur(4px); }
+  to   { opacity: 1; letter-spacing: initial; filter: blur(0); }
+}
+
+.classified-in { animation: flicker 0.5s ease-out, cipher-in 0.8s ease-out; }
+.pulse-gold    { animation: pulse-gold 3s ease-in-out infinite; }
+
+/* ── Scan beam overlay ───────────────────────────────────────────────────── */
+.scan-beam {
+  position: fixed;
+  left: 0; right: 0;
+  height: 3px;
+  z-index: 9999;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #B8860B15 20%,
+    #DAA52030 50%,
+    #B8860B15 80%,
+    transparent 100%
+  );
+  animation: scandown 10s linear infinite;
+  top: 0;
+}
+
+/* ── Ancient border corners ─────────────────────────────────────────────── */
+.cipher-card {
+  position: relative;
+  background: #080604;
+  border: 1px solid #2A1E0A;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.cipher-card:hover {
+  border-color: #B8860B40;
+  box-shadow: 0 0 30px #B8860B15;
 }

@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from core.swarm import Swarm
 from core.agent import SiloAgent, Skill
 from core.agents.trader import TraderAgent
+from core import memory as mem
 
 logging.basicConfig(level=os.environ.get("SILOPOLIS_LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
@@ -198,6 +199,50 @@ def agent_think(
         return {"agent": req.agent_name, "response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/heartbeat/status")
+def heartbeat_status():
+    """Live heartbeat status — used by the dashboard timer widget."""
+    try:
+        mem.init_db()
+        history = mem.get_heartbeat_history(limit=1)
+        last = history[0] if history else None
+        all_hb = mem.get_heartbeat_history(limit=1000)
+        return {
+            "last_heartbeat": last,
+            "total_cycles": len(all_hb),
+            "running": False,  # set True if heartbeat process is active
+            "next_interval_sec": 28800,
+        }
+    except Exception as e:
+        return {"last_heartbeat": None, "total_cycles": 0, "running": False, "error": str(e)}
+
+
+@app.get("/api/knowledge")
+def swarm_knowledge(limit: int = 50):
+    """Return collective swarm knowledge for dashboard display."""
+    try:
+        mem.init_db()
+        return {"knowledge": mem.get_swarm_knowledge(min_confidence=0.3, limit=limit)}
+    except Exception as e:
+        return {"knowledge": [], "error": str(e)}
+
+
+@app.get("/api/contracts")
+def contract_addresses():
+    """Return deployed contract addresses."""
+    return {
+        "network": "X Layer",
+        "chain_id": 196,
+        "contracts": {
+            "AgentRegistry":    os.environ.get("AGENT_REGISTRY_ADDRESS", ""),
+            "ReputationEngine": os.environ.get("REPUTATION_ENGINE_ADDRESS", ""),
+            "SkillMarket":      os.environ.get("SKILL_MARKET_ADDRESS", ""),
+        },
+        "explorer_base": "https://www.oklink.com/xlayer/address/",
+        "wallet": os.environ.get("AGENT_WALLET_ADDRESS", ""),
+    }
 
 
 @app.get("/health")

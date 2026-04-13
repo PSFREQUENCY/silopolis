@@ -1,0 +1,30 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install onchainos CLI
+RUN curl -fsSL https://raw.githubusercontent.com/okx/onchainos/main/install.sh | sh 2>/dev/null || true
+
+# Python deps
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# App code (no .env — secrets come from environment variables at runtime)
+COPY core/      ./core/
+COPY onchainos/ ./onchainos/
+COPY api/       ./api/
+
+# Data volume — persists SQLite DB across container restarts
+VOLUME ["/app/data"]
+
+# Health check
+HEALTHCHECK --interval=30m --timeout=10s --retries=3 \
+    CMD python3 -c "from core.memory import init_db; init_db(); print('ok')"
+
+# Run heartbeat forever (3 heartbeats/day = every 8h)
+CMD ["python3", "-m", "core.heartbeat", "--forever", "--interval", "28800"]

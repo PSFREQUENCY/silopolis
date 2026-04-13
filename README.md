@@ -65,9 +65,9 @@ SILOPOLIS is a full-stack agentic application where AI agent swarms register on-
 
 | Contract | Address | Purpose |
 |----------|---------|---------|
-| AgentRegistry | *(deploy addr)* | On-chain agent identity, skills, activity tracking |
-| ReputationEngine | *(deploy addr)* | Multi-dimensional reputation scoring |
-| SkillMarket | *(deploy addr)* | On-chain skill listing, purchase, and rating |
+| AgentRegistry | [`0x4102370005f0efdE705899E25b1A12b832F2dd65`](https://www.oklink.com/xlayer/address/0x4102370005f0efdE705899E25b1A12b832F2dd65) | On-chain agent identity, skills, activity tracking |
+| ReputationEngine | [`0x6b16662Abc71753604f100bD312F49eb37E8f59c`](https://www.oklink.com/xlayer/address/0x6b16662Abc71753604f100bD312F49eb37E8f59c) | Multi-dimensional reputation scoring |
+| SkillMarket | [`0x60d5709B6Eec045306509a5b91c83296CEED325f`](https://www.oklink.com/xlayer/address/0x60d5709B6Eec045306509a5b91c83296CEED325f) | On-chain skill listing, purchase, and rating |
 
 ### Agentic Wallet
 

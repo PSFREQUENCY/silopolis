@@ -1,0 +1,66 @@
+version: "3.9"
+
+# SILOPOLIS Autonomous Heartbeat — 3 snapshots per day, no cloud needed
+# Usage: docker compose -f docker/docker-compose.yml up -d
+# Logs:  docker compose -f docker/docker-compose.yml logs -f heartbeat
+# Stop:  docker compose -f docker/docker-compose.yml down
+
+services:
+  heartbeat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.heartbeat
+    container_name: silopolis-heartbeat
+    restart: unless-stopped
+
+    # All secrets from .env — never baked into the image
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - OK_API_KEY=${OK_API_KEY}
+      - OK_SECRET_KEY=${OK_SECRET_KEY}
+      - OKX_PASSPHRASE=${OKX_PASSPHRASE}
+      - ONCHAINOS_API_KEY=${ONCHAINOS_API_KEY}
+      - ONCHAINOS_PROJECT_ID=${ONCHAINOS_PROJECT_ID}
+      - ONCHAINOS_BASE_URL=${ONCHAINOS_BASE_URL:-https://www.okx.com}
+      - AGENT_WALLET_ADDRESS=${AGENT_WALLET_ADDRESS}
+      - XLAYER_RPC_URL=${XLAYER_RPC_URL:-https://xlayerrpc.okx.com}
+      - SILOPOLIS_MAX_SPEND_PER_DAY_USD=${SILOPOLIS_MAX_SPEND_PER_DAY_USD:-1.00}
+      - SILOPOLIS_MAX_GAS_GWEI=${SILOPOLIS_MAX_GAS_GWEI:-50}
+      - SILOPOLIS_LOG_LEVEL=${SILOPOLIS_LOG_LEVEL:-INFO}
+
+    volumes:
+      # SQLite DB persists across restarts — mounted from host
+      - ../data:/app/data
+
+    # Resource limits — this is light; ~50MB RAM, near-zero CPU between heartbeats
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.25"
+
+  # Optional: run the API alongside heartbeat for dashboard data
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.heartbeat
+    container_name: silopolis-api
+    restart: unless-stopped
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OK_API_KEY=${OK_API_KEY}
+      - OK_SECRET_KEY=${OK_SECRET_KEY}
+      - OKX_PASSPHRASE=${OKX_PASSPHRASE}
+      - ONCHAINOS_API_KEY=${ONCHAINOS_API_KEY}
+      - ONCHAINOS_PROJECT_ID=${ONCHAINOS_PROJECT_ID}
+      - AGENT_WALLET_ADDRESS=${AGENT_WALLET_ADDRESS}
+      - SILOPOLIS_ADMIN_KEY=${SILOPOLIS_ADMIN_KEY}
+      - SILOPOLIS_LOG_LEVEL=${SILOPOLIS_LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../data:/app/data
+    depends_on:
+      - heartbeat

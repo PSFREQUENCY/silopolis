@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "skills": {
+    "configurator": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "251add1c645e4a3063a9f359b25c8da8fa31dc46be9a122dab253644f778cf45"
+    },
+    "deployer": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "73b54e9f79855c470fb2e8ea61ff21fab631e19d011c6fdedc27a41fc0c98f8d"
+    },
+    "liquidity-planner": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "42facfb96be928b35effd960093b1b05ee34c9e5254ed3a2086bf25b4d379cae"
+    },
+    "pay-with-any-token": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "7e8ae15113e4c9e1d32a7d928d8176892a0211cd2520834f78a65b90b6236f68"
+    },
+    "swap-integration": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "3175d202669303732d7147934faedb4a81744e23e5db7c72fae61c2e7bfd7d2c"
+    },
+    "swap-planner": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "976029b4d6ffd2406ba2187e9401017535f88ab444d97e52f1f5b001d8d93b23"
+    },
+    "v4-hook-generator": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "6796284522afe7cb8e8e2fa771a5a5dc0611822da8026361df718ca1d8f3ea09"
+    },
+    "v4-sdk-integration": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "f5a88201d61587d0d7915e9c1e10761c4a9feed10034009bce60841962c2e9a4"
+    },
+    "v4-security-foundations": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "f4d5741e07fcb5e0efabb7700a44e8102b646645b3da2583b823acc9538acf61"
+    },
+    "viem-integration": {
+      "source": "Uniswap/uniswap-ai",
+      "sourceType": "github",
+      "computedHash": "d4ed32df4663a883755039b76f64a85a9a1e4aab0e827ab477ae566c556b4bb6"
+    }
+  }
+}
