@@ -1,1 +1,0 @@
-self.__REACT_LOADABLE_MANIFEST='{"app/page.tsx -> ../components/HeartbeatTimer":{"id":4573,"files":["static/chunks/573.c009cc65d2be00e2.js"]},"app/page.tsx -> ../components/ParticleArena":{"id":3762,"files":["static/chunks/762.2763d316b3d11522.js"]}}';

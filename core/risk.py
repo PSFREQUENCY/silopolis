@@ -142,29 +142,52 @@ class RiskGovernor:
         self._fetch_balance()
 
     def _fetch_balance(self) -> None:
-        """Try to fetch live OKB balance from OnchainOS."""
+        """Fetch live OKB balance — tries web3 RPC first, then OnchainOS CLI."""
+        wallet = os.environ.get("AGENT_WALLET_ADDRESS", "")
+        if not wallet:
+            return
+
+        # Primary: direct RPC call (most reliable)
+        try:
+            from web3 import Web3
+            rpc = os.environ.get("XLAYER_RPC_URL", "https://xlayerrpc.okx.com")
+            w3 = Web3(Web3.HTTPProvider(rpc, request_kwargs={"timeout": 10}))
+            if w3.is_connected():
+                raw_bal = w3.eth.get_balance(Web3.to_checksum_address(wallet))
+                bal = float(w3.from_wei(raw_bal, "ether"))
+                if bal >= 0:
+                    self.state.okb_balance = bal
+                    logger.info("Vault: %.6f OKB on X Layer (tier: %s)", bal, self.tier.name)
+                    save_vault_state(self.state)
+                    return
+        except Exception as e:
+            logger.debug("RPC balance fetch failed: %s", e)
+
+        # Fallback: OnchainOS CLI portfolio
         try:
             from onchainos import cli as onchainos
-            wallet = os.environ.get("AGENT_WALLET_ADDRESS", "")
-            if not wallet:
-                return
             bal_raw = onchainos.portfolio_balances()
+            tokens = []
             if isinstance(bal_raw, dict):
                 data = bal_raw.get("data", bal_raw)
-                # Look for OKB in the token list
                 if isinstance(data, list):
-                    for token in data:
-                        sym = (token.get("symbol") or "").upper()
-                        if sym in ("OKB", "NATIVE"):
-                            bal = float(token.get("balance") or token.get("tokenBalance") or 0)
-                            if bal > 0:
-                                self.state.okb_balance = bal
-                                logger.info("Vault balance: %.6f OKB (tier: %s)",
-                                            bal, self.tier.name)
-                                save_vault_state(self.state)
-                                return
+                    tokens = data
+                elif isinstance(data, dict):
+                    tokens = data.get("tokenAssets", data.get("tokens", []))
+            elif isinstance(bal_raw, list):
+                tokens = bal_raw
+            for token in tokens:
+                sym = (token.get("symbol") or token.get("tokenSymbol") or "").upper()
+                if sym in ("OKB", "NATIVE", ""):
+                    raw = token.get("balance") or token.get("tokenBalance") or token.get("amount") or "0"
+                    bal = float(str(raw).replace(",", ""))
+                    if bal > 0:
+                        self.state.okb_balance = bal
+                        logger.info("Vault (CLI): %.6f OKB (tier: %s)", bal, self.tier.name)
+                        save_vault_state(self.state)
+                        return
         except Exception as e:
-            logger.debug("Balance fetch failed: %s", e)
+            logger.debug("CLI balance fetch failed: %s", e)
 
     @property
     def tier(self) -> RiskTier:

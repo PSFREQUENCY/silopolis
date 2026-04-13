@@ -92,7 +92,9 @@ AGENT_ROSTER = [
 ]
 
 WALLET_ADDRESS = os.environ.get("AGENT_WALLET_ADDRESS", "0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d")
-HEARTBEAT_INTERVAL_SEC = 8 * 3600  # 3x per day
+# 12 heartbeats/day = every 2 hours (for active hackathon period)
+# Set SILOPOLIS_HEARTBEAT_INTERVAL=28800 in .env to revert to 8h (3x/day)
+HEARTBEAT_INTERVAL_SEC = int(os.environ.get("SILOPOLIS_HEARTBEAT_INTERVAL", str(2 * 3600)))
 
 
 # ─── Observation Phase ────────────────────────────────────────────────────────
