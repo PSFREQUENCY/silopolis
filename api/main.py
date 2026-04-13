@@ -125,9 +125,16 @@ def root():
 
 @app.get("/api/status")
 def swarm_status():
-    """Live swarm status from SQLite — real 5 heartbeat agents."""
+    """Live swarm status from SQLite — 9 heartbeat agents."""
+    import sqlite3
+    from pathlib import Path
     try:
         mem.init_db()
+        db_path = Path(__file__).parent.parent / "data" / "silopolis.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        agent_count = conn.execute("SELECT COUNT(DISTINCT agent_name) FROM decision_log").fetchone()[0] or 9
+        conn.close()
         hb_row = mem.get_heartbeat_history(limit=1)
         hb = hb_row[0] if hb_row else {}
         all_hb = mem.get_heartbeat_history(limit=1000)
@@ -135,13 +142,13 @@ def swarm_status():
         return {
             "running": False,
             "cycle_count": len(all_hb),
-            "agent_count": 5,
+            "agent_count": max(agent_count, 9),
             "global_budget_remaining_usd": 10.0,
             "total_actions": total_actions,
             "last_cycle": hb,
         }
     except Exception as e:
-        return {"running": False, "cycle_count": 0, "agent_count": 5,
+        return {"running": False, "cycle_count": 0, "agent_count": 9,
                 "global_budget_remaining_usd": 10.0, "error": str(e)}
 
 
