@@ -457,7 +457,7 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
                     <span className="font-mono text-xs ml-2 truncate" style={{ color: "#4A3A22" }}>{String(k.value).slice(0, 40)}</span>
                   </div>
                   <div className="flex-shrink-0 font-mono text-xs" style={{ color: Number(k.confidence) >= 0.7 ? "#34D399" : "#FBBF24" }}>
-                    {Math.round(Number(k.confidence) * 100)}%
+                    {isNaN(Number(k.confidence)) ? "—" : Math.round(Number(k.confidence) * 100) + "%"}
                   </div>
                 </div>
               ))}
@@ -920,6 +920,34 @@ export default function SilopolisPage() {
       </section>
 
       {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* LIVE CIPHER FEED + WALLET                                          */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <section className="px-6 py-16 max-w-7xl mx-auto">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <div className="text-xs tracking-[0.3em] mb-2" style={{ color: "#B8860B" }}>ON-CHAIN ACTIVITY</div>
+            <h2 className="text-4xl font-black tracking-tight" style={{ color: "#DAA520" }}>LIVE FEED</h2>
+            <p className="text-sm mt-2 font-mono" style={{ color: "#4A3A22" }}>
+              Every cycle captured · 12 heartbeats/day · immutable audit trail
+            </p>
+          </div>
+          <a
+            href={EXPLORER}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 text-xs font-mono font-bold tracking-widest transition-all"
+            style={{ border: "1px solid #B8860B60", color: "#DAA520", background: "#1A1002" }}
+          >
+            VERIFY ON OKLINK ↗
+          </a>
+        </div>
+        <div className="space-y-4">
+          <WalletPanel apiBase={API_BASE} />
+          <TradeFeed apiBase={API_BASE} />
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
       {/* RELIC CODEX — SKILL NODE MAP                                        */}
       {/* ════════════════════════════════════════════════════════════════════ */}
       <section style={{ background: "#080604", borderTop: "1px solid #2A1E0A" }} className="px-6 py-16">
@@ -1027,34 +1055,6 @@ export default function SilopolisPage() {
               </div>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* LIVE CIPHER FEED + WALLET                                          */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      <section className="px-6 py-16 max-w-7xl mx-auto">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <div className="text-xs tracking-[0.3em] mb-2" style={{ color: "#B8860B" }}>ON-CHAIN ACTIVITY</div>
-            <h2 className="text-4xl font-black tracking-tight" style={{ color: "#DAA520" }}>LIVE FEED</h2>
-            <p className="text-sm mt-2 font-mono" style={{ color: "#4A3A22" }}>
-              Every cycle captured · 12 heartbeats/day · immutable audit trail
-            </p>
-          </div>
-          <a
-            href={EXPLORER}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-2 text-xs font-mono font-bold tracking-widest transition-all"
-            style={{ border: "1px solid #B8860B60", color: "#DAA520", background: "#1A1002" }}
-          >
-            VERIFY ON OKLINK ↗
-          </a>
-        </div>
-        <div className="space-y-4">
-          <WalletPanel apiBase={API_BASE} />
-          <TradeFeed apiBase={API_BASE} />
         </div>
       </section>
 

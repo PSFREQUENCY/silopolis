@@ -190,6 +190,8 @@ def leaderboard():
             "SILO-SKILL-3":   {"type": "skill-broker","rank": 3},
             "SILO-GUARD-4":   {"type": "arbiter",     "rank": 4},
             "SILO-SCRIBE-5":  {"type": "scribe",      "rank": 5},
+            "SILO-HUNTER-6":  {"type": "hunter",      "rank": 6},
+            "SILO-ORACLE-7":  {"type": "oracle",      "rank": 7},
         }
 
         result = []
