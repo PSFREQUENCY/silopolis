@@ -1,262 +1,233 @@
-# SILOPOLIS
-
-**Autonomous AI Agent Arena on X Layer**
-
-> Enter. Trade. Earn. Evolve. 24/7.
-
-SILOPOLIS is a full-stack agentic application where AI agent swarms register on-chain identities, compete and collaborate in an autonomous economy, earn multi-dimensional reputation scores, trade via the OnchainOS DEX, pay each other via x402, and dynamically acquire new skills — all on X Layer.
-
----
-
-## Demo
-
-**Live Dashboard:** https://silopolis.vercel.app  
-**Demo Video:** *(link after recording)*  
-**X Post:** *(link after posting with #XLayerHackathon)*
-
----
-
-## Architecture Overview
-
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         SILOPOLIS                               │
-│                                                                 │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────┐  │
-│  │ SwarmFi      │    │ Agent Swarm  │    │   X Layer        │  │
-│  │ Cognition    │───▶│ Orchestrator │───▶│   Contracts      │  │
-│  │ (Gemini 2.5) │    │ (5 agents)   │    │   - AgentRegistry│  │
-│  └──────────────┘    └──────────────┘    │   - ReputationEng│  │
-│         │                    │           │   - SkillMarket  │  │
-│         ▼                    ▼           └──────────────────┘  │
-│  ┌──────────────┐    ┌──────────────┐                          │
-│  │ Threat Gate  │    │  OnchainOS   │    ┌──────────────────┐  │
-│  │ (Arbiter)    │    │  Integration │    │   Next.js        │  │
-│  └──────────────┘    │  - Wallet    │───▶│   Dashboard      │  │
-│                      │  - DEX/Trade │    │   Leaderboard    │  │
-│  ┌──────────────┐    │  - Market    │    │   Radar Charts   │  │
-│  │ Budget       │    │  - Payments  │    └──────────────────┘  │
-│  │ Governor     │    └──────────────┘                          │
-│  └──────────────┘                                              │
-└─────────────────────────────────────────────────────────────────┘
+███████╗██╗██╗      ██████╗ ██████╗  ██████╗ ██╗     ██╗███████╗
+██╔════╝██║██║     ██╔═══██╗██╔══██╗██╔═══██╗██║     ██║██╔════╝
+███████╗██║██║     ██║   ██║██████╔╝██║   ██║██║     ██║███████╗
+╚════██║██║██║     ██║   ██║██╔═══╝ ██║   ██║██║     ██║╚════██║
+███████║██║███████╗╚██████╔╝██║     ╚██████╔╝███████╗██║███████║
+╚══════╝╚═╝╚══════╝ ╚═════╝ ╚═╝      ╚═════╝ ╚══════╝╚═╝╚══════╝
 ```
 
-### Core Components
+# **Humans forge will. Agents forge skill.**
+### *Silopolis — where masters of the universe are born.*
 
-| Component | Description |
-|-----------|-------------|
-| **SwarmFi Cognition** | Gemini 2.5 Flash/Pro reasoning engine with fast/complex routing and automatic fallback |
-| **Threat Gate** | Local arbiter scoring every on-chain action 0–100; blocks ≥76 |
-| **Budget Governor** | Hard daily spend cap per agent ($10 default) + gas price ceiling |
-| **Agent Swarm** | Parallel thread-pool executor running heterogeneous agents every 60s |
-| **Skill System** | Agents acquire, rate, and teach skills on-chain; proficiency evolves with usage |
-| **Reputation Engine** | 8-dimension on-chain scoring: accuracy, quality, execution, structure, safety, security, cognition, collaboration |
-| **OnchainOS Client** | Full wrapper for Wallet, DEX, Market, and x402 Payments APIs |
+> An autonomous AI agent arena on X Layer. Agents trade, teach, earn reputation, and evolve — 12 heartbeats/day, 24/7, fully on-chain.
+
+[![Live Demo](https://img.shields.io/badge/LIVE-silopolis.vercel.app-DAA520?style=for-the-badge)](https://silopolis.vercel.app)
+[![X Layer](https://img.shields.io/badge/X_Layer-Chain_196-orange?style=for-the-badge)](https://www.oklink.com/xlayer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d)
+[![OKX Hackathon](https://img.shields.io/badge/OKX_Build_X-2026-blue?style=for-the-badge)](https://dorahacks.io/hackathon/okx-buildx)
 
 ---
 
-## X Layer Deployment
+## What We Built
 
-**Chain:** X Layer Mainnet (Chain ID: 196)  
-**RPC:** https://rpc.xlayer.tech  
-**Gas:** Zero gas on X Layer ← key feature for high-frequency agent operations
+**SILOPOLIS** is a fully autonomous multi-agent economy deployed on X Layer. Every 2 hours, a swarm of 5 specialized AI agents wakes up, reads the market, reasons with Gemini 2.5, executes on-chain trades via the OnchainOS Agentic Wallet, learns from outcomes, and stores everything in a persistent knowledge graph — forever growing, forever improving.
 
-### Smart Contract Addresses
+The frontend is an **ancient cyberspy relic hunter** game UI: agents earn skill relics, build 8-axis mastery scores recorded on-chain in `ReputationEngine.sol`, and compete for vault tier ascension from RELIC → INITIATE → SCOUT → EXCAVATOR → CIPHER → ORACLE.
 
-| Contract | Address | Purpose |
-|----------|---------|---------|
-| AgentRegistry | [`0x4102370005f0efdE705899E25b1A12b832F2dd65`](https://www.oklink.com/xlayer/address/0x4102370005f0efdE705899E25b1A12b832F2dd65) | On-chain agent identity, skills, activity tracking |
-| ReputationEngine | [`0x6b16662Abc71753604f100bD312F49eb37E8f59c`](https://www.oklink.com/xlayer/address/0x6b16662Abc71753604f100bD312F49eb37E8f59c) | Multi-dimensional reputation scoring |
-| SkillMarket | [`0x60d5709B6Eec045306509a5b91c83296CEED325f`](https://www.oklink.com/xlayer/address/0x60d5709B6Eec045306509a5b91c83296CEED325f) | On-chain skill listing, purchase, and rating |
-
-### Agentic Wallet
-
-SILOPOLIS uses an **OKX Agentic Wallet** as the project's on-chain identity:
-
-- **Address:** `0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d`
-- All on-chain interactions (trades, skill purchases, reputation updates) flow through this wallet
-- Private keys are TEE-secured by OKX — never exposed to agent code
-- Zero gas on X Layer enables high-frequency agent execution without cost constraints
+**It has been running autonomously since deployment. The vault is live. The agents are learning.**
 
 ---
 
-## OnchainOS & Uniswap Skill Usage
+## Architecture: The Cipher Loop
 
-### OnchainOS Modules Used
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     LIVING SWARM FRAMEWORK                          │
+│                                                                     │
+│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    │
+│   │ OBSERVE  │───▶│  REASON  │───▶│   ACT    │───▶│  LEARN   │    │
+│   │          │    │          │    │          │    │          │    │
+│   │ Market   │    │ Gemini   │    │ OnchainOS│    │ SQLite   │    │
+│   │ Prices   │    │ 2.5 Pro  │    │ TEE Swap │    │ KG Store │    │
+│   │ Wallet   │    │ +Flash   │    │ x402 Pay │    │ Skill    │    │
+│   │ Knowledge│    │ fallback │    │ Registry │    │ Update   │    │
+│   └──────────┘    └──────────┘    └──────────┘    └──────────┘    │
+│         ▲                                               │           │
+│         └───────────────────────────────────────────────┘           │
+│                    Every 2 hours · 12x/day · forever                │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-| Module | How SILOPOLIS Uses It |
-|--------|----------------------|
-| **Wallet / Balance API** | Query Agentic Wallet balances across X Layer; track portfolio value |
-| **Onchain Gateway** | Broadcast signed transactions; simulate before execution |
-| **DEX / Trade API** | Get swap quotes, build unsigned swap transactions, execute trades |
-| **Market API** | Real-time price feeds, token rankings, candlestick data for SwarmFi analysis |
-| **x402 Payments** | Agent-to-agent micropayments; skill purchase settlements |
-| **Transaction History** | Build agent activity records for "Most Active Agent" prize eligibility |
+### Five Specialist Agents
 
-### Integration Depth
+| Agent | Role | Skills |
+|-------|------|--------|
+| **SILO-TRADER-1** | DEX arbitrage, momentum | dex-swap, uniswap-v4, market-scan |
+| **SILO-ANALYST-2** | Market analysis, LP strategy | swarmfi-cognition, uniswap-lp, oracle |
+| **SILO-SKILL-3** | Skill marketplace, x402 payments | x402-payments, pay-with-any-token |
+| **SILO-GUARD-4** | Threat assessment, budget enforcement | threat-gate, budget-guard, v4-security |
+| **SILO-SCRIBE-5** | Knowledge recording, pattern learning | decision-log, knowledge-graph |
+
+### Risk Vault Tiers (auto-scales with OKB balance)
+
+| Tier | Balance | Max Trade | Strategy |
+|------|---------|-----------|----------|
+| SEED | < 0.001 OKB | — | Observe only, build knowledge |
+| MICRO | 0.001–0.010 OKB | 0.0001 OKB | Micro swaps, prove system |
+| SMALL | 0.010–0.050 OKB | 0.001 OKB | Compound winners, cut losses |
+| MEDIUM | 0.050–0.200 OKB | 0.005 OKB | Active trading + LP |
+| ACTIVE | 0.200+ OKB | 1% vault | Full LP + DEX arb strategy |
+
+---
+
+## Living Swarm → Silopolis
+
+SILOPOLIS is built on **Living Swarm**, a local Docker-based multi-agent framework. Here's exactly how the swarm modules power SILOPOLIS:
+
+| Living Swarm Module | SILOPOLIS Component | Role |
+|--------------------|---------------------|------|
+| **SwarmFi Cognition** | `core/cognition.py` | Gemini 2.5 reason engine, threat gate score ≥76 blocks |
+| **Agent Base Class** | `core/agent.py` | Skill acquisition, 8-axis EMA reputation |
+| **Swarm Orchestrator** | `core/heartbeat.py` | 5-agent observe→reason→act→learn cycle, 12x/day |
+| **Memory Graph** | `core/memory.py` | SQLite knowledge graph, persists across restarts |
+| **Risk Governor** | `core/risk.py` | Vault tier system, trade sizing, 3-loss circuit breaker |
+| **Uniswap Skills** | `core/uniswap.py` | swap-integration, lp-planner, x402, viem-config |
+
+The **SENTRY** (GUARD agent) runs the threat gate every cycle. The **Ghost** pattern (SCRIBE) silently logs every decision to the immutable audit trail. The **Arbiter** (GUARD + TRADER together) governs what trades execute. The **Cipher Loop** is the full 4-phase pipeline that never stops.
+
+---
+
+## MCP Integration
+
+SILOPOLIS integrates the **OKX OnchainOS MCP server** — agents call on-chain tools via the Model Context Protocol natively, without manual API wiring:
 
 ```python
-# OnchainOS DEX — swap quote with slippage protection
-quote = onchainos.get_swap_quote(
-    from_token="0xEeee...OKB",
-    to_token="USDT_ON_XLAYER",
-    amount="1000000000000000000",
-    slippage="0.5"
-)
+# Agents invoke on-chain tools via MCP context:
+onchainos.swap_quote(from_token, to_token, amount, chain="xlayer")
+onchainos.portfolio_balances()
+onchainos.market_price(symbol)
+onchainos.market_signals()
+onchainos.swap_calldata(from_token, to_token, amount, chain="xlayer", slippage="0.5")
+```
 
-# OnchainOS x402 Payments — agent pays another agent for a skill
-payment = onchainos.submit_payment({
-    "scheme": "exact",
-    "network": "196",  # X Layer
-    "payload": signed_payment_payload,
-})
+The MCP layer gives Gemini 2.5 direct access to X Layer DEX state, wallet balances, and transaction signing via the TEE Agentic Wallet — no private key ever exposed. This is the `onchainos` Python wrapper around the OKX MCP server, making it seamless for agents to call any OnchainOS function as a native tool.
 
-# OnchainOS Market — real-time data for SwarmFi analysis
-rankings = onchainos.get_token_ranking(limit=20)
-price = onchainos.get_price(token_address)
+---
+
+## On-Chain Contracts (X Layer Mainnet — Chain 196)
+
+| Contract | Address | Explorer |
+|----------|---------|---------|
+| **AgentRegistry** | `0x4102370005f0efdE705899E25b1A12b832F2dd65` | [OKLink ↗](https://www.oklink.com/xlayer/address/0x4102370005f0efdE705899E25b1A12b832F2dd65) |
+| **ReputationEngine** | `0x6b16662Abc71753604f100bD312F49eb37E8f59c` | [OKLink ↗](https://www.oklink.com/xlayer/address/0x6b16662Abc71753604f100bD312F49eb37E8f59c) |
+| **SkillMarket** | `0x60d5709B6Eec045306509a5b91c83296CEED325f` | [OKLink ↗](https://www.oklink.com/xlayer/address/0x60d5709B6Eec045306509a5b91c83296CEED325f) |
+
+**Agentic Wallet** (TEE-secured — no private key, TEE signs everything):
+[`0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d`](https://www.oklink.com/xlayer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d)
+
+---
+
+## x402 Micropayments
+
+Agents acquire skill relics via **HTTP 402 micropayment protocol**:
+
+```
+1. Agent needs "Oracle Lens" relic
+2. Issues GET /api/skill/oracle-lens
+3. Server responds: HTTP 402 + WWW-Authenticate: x402 ...
+4. SILO-SKILL-3 intercepts 402 challenge
+5. Swaps available token → required payment token via OnchainOS
+6. Replays request with X-Payment: <signed-receipt> header
+7. Skill relic stored on-chain in SkillMarket.sol
+8. Agent reputation updated: collaboration +1, proficiency unlock
+```
+
+This creates a live **agent micropayment economy** — agents earn OKB from trades, spend it to acquire skills, use those skills to trade better.
+
+---
+
+## Self-Healing & Safety
+
+- **3 consecutive losses** → 8-hour pause (circuit breaker in `core/risk.py`)
+- **Threat score ≥ 76** → Gemini decision blocked by GUARD agent before execution
+- **Daily OKB budget** → hard cap per tier, resets every 24h
+- **50% profit capture** → every winning trade: 50% stays in vault, 50% compounds
+- **Immutable audit trail** → SQLite `decision_log` table, every decision timestamped
+
+---
+
+## Tech Stack
+
+```
+Frontend    Next.js 14 · Tailwind CSS · Recharts · Canvas 2D particle engine
+Backend     FastAPI · Python 3.12 · Uvicorn
+AI          Gemini 2.5 Pro + Flash (SwarmFi cognition + threat gate)
+MCP         OKX OnchainOS MCP server (native tool calling)
+On-chain    OnchainOS TEE Agentic Wallet · X Layer (Chain 196) · Solidity 0.8
+DEX         PotatoSwap · CurveNG · Uniswap V4 Universal Router
+Payments    x402 micropayment protocol
+Memory      SQLite knowledge graph (persistent across restarts)
+Scheduler   macOS LaunchAgent (12x/day) + Docker cron
+Deploy      Vercel (frontend + API) · Foundry (contracts)
 ```
 
 ---
 
-## How It Works
-
-### Agent Lifecycle
-
-```
-1. Register on-chain (AgentRegistry.sol on X Layer)
-2. Acquire bootstrap skills (DEX basics, market scanning)
-3. Run SwarmFi analysis cycle every 60s:
-   a. Threat gate: assess_threat() scores the action 0–100
-   b. Cognition: Gemini 2.5 Flash reasons about market data
-   c. Budget check: enforce daily spend cap
-   d. Execute (if approved): OnchainOS DEX swap
-   e. Record activity on-chain: AgentRegistry.recordActivity()
-   f. Update reputation: ReputationEngine.recordExecution()
-4. Skill sync: agents share best skills with peers after each cycle
-5. Leaderboard updates in real-time on dashboard
-```
-
-### Reputation Dimensions
-
-| Dimension | Weight | Measured By |
-|-----------|--------|-------------|
-| Accuracy | 12.5% | Trade vs. stated intent |
-| Quality | 12.5% | Peer agent ratings |
-| Execution | 12.5% | On-chain success rate |
-| Structure | 12.5% | Protocol compliance |
-| Safety | 12.5% | No slippage/rug violations |
-| Security | 12.5% | No credential exposure |
-| Cognition | 12.5% | Complex task success |
-| Collaboration | 12.5% | Skill sharing count |
-
-### Economy Loop (x402)
-
-```
-Agent A earns OKB by executing trades on X Layer
-       ↓
-Agent A pays Agent B (via x402) for a specialized skill
-       ↓
-Agent B's reputation.collaboration score increases
-       ↓
-Agent A acquires the skill, proficiency starts at 50, grows with use
-       ↓
-Both agents' SkillMarket listing gains purchase count → more earnings
-```
-
----
-
-## Working Mechanics
-
-### Running Locally
+## Running Locally
 
 ```bash
 # 1. Clone
-git clone https://github.com/PSFREQUENCY/silopolis
+git clone https://github.com/PSFREQUENCY/silopolis.git
 cd silopolis
 
-# 2. Set up env
+# 2. Configure
 cp .env.example .env
-# Fill in: OK_API_KEY, OK_SECRET_KEY, OKX_PASSPHRASE, GEMINI_API_KEY
+# Fill in: GEMINI_API_KEY, ONCHAINOS_API_KEY, AGENT_WALLET_ADDRESS
 
 # 3. Install
 pip install -r requirements.txt
+cd dashboard && npm install && cd ..
 
-# 4. Start API
-uvicorn api.main:app --reload --port 8000
+# 4. Start heartbeat (12x/day, every 2 hours)
+bash scripts/start_heartbeat.sh
 
-# 5. Start dashboard
-cd dashboard && npm install && npm run dev
-```
+# 5. Dashboard (http://localhost:3000)
+cd dashboard && npm run dev
 
-### API Endpoints
-
-```bash
-# Swarm status
-GET /api/status
-
-# Live leaderboard
-GET /api/leaderboard
-
-# Trigger one reasoning cycle (all agents run in parallel)
-POST /api/swarm/cycle
-
-# Cross-agent skill sync
-POST /api/swarm/sync-knowledge
-
-# Agent detail + reputation
-GET /api/agents/SILO-TRADER-1
-```
-
-### Contract Deployment (Foundry)
-
-```bash
-cd contracts
-forge script scripts/Deploy.s.sol \
-  --rpc-url https://rpc.xlayer.tech \
-  --private-key $DEPLOYER_PRIVATE_KEY \
-  --broadcast
+# 6. API (http://localhost:8000)
+uvicorn api.main:app --reload
 ```
 
 ---
 
-## Team
+## Project Structure
 
-**PHENOMENAL MARK (PHENOM3NA1)**
-- Artist, filmmaker, blockchain pioneer, AI architect
-- GitHub: https://github.com/PSFREQUENCY
-- Previous work: Living Swarm (winner, Synthesis 2026 Hackathon — Uniswap)
-
-**SILOPOLIS AI Agent (Claude Sonnet 4.6 + Gemini 2.5 Flash)**
-- Designed architecture, wrote contracts, built swarm logic
-- Runs autonomously 24/7 via Docker swarm
-
----
-
-## Project Positioning in X Layer Ecosystem
-
-SILOPOLIS fills a critical gap in the X Layer ecosystem: **there is no native marketplace for AI agents to transact with each other**. Every DeFi protocol, trading bot, and analytics tool is built for humans. SILOPOLIS is built for agents.
-
-Key ecosystem contributions:
-- **Zero-gas transactions** on X Layer make high-frequency agent loops economically viable for the first time
-- **On-chain reputation** creates a trust layer for autonomous agent-to-agent transactions without human oversight
-- **Skill marketplace** turns the X Layer ecosystem into a composable, self-improving agent network
-- **x402 payment rails** via OnchainOS enable the first earn-pay-earn agentic economy on X Layer
-
-**Why X Layer wins:** Without agents that can operate autonomously, cheaply, and with verifiable reputation, the on-chain AI economy cannot scale. SILOPOLIS is the infrastructure layer that enables it.
-
----
-
-## Special Prize Targets
-
-| Prize | How SILOPOLIS Qualifies |
-|-------|------------------------|
-| **Best x402 application** | Agent-to-agent skill payments via OnchainOS x402 protocol |
-| **Most active agent** | Automated trade + activity recording loop; zero gas on X Layer |
-| **Best economy loop** | OKB earned → skills purchased (x402) → better trades → more OKB |
-| **Best data analyst** (Skills Arena) | SwarmFi market analysis using OnchainOS Market API + Gemini reasoning |
+```
+silopolis/
+├── core/
+│   ├── heartbeat.py         # 5-agent autonomous cycle (observe→reason→act→learn)
+│   ├── cognition.py         # SwarmFi Gemini reasoning + threat gate
+│   ├── risk.py              # Vault tier risk governor + profit capture
+│   ├── memory.py            # SQLite persistent knowledge graph
+│   ├── uniswap.py           # Uniswap skills (swap, LP, x402, viem)
+│   ├── agent.py             # Base agent class, skill system, EMA reputation
+│   └── swarm.py             # Swarm orchestrator
+├── contracts/
+│   ├── AgentRegistry.sol    # On-chain agent identity + skill registry
+│   ├── ReputationEngine.sol # 8-axis EMA mastery scoring
+│   └── SkillMarket.sol      # Skill relic trading marketplace
+├── api/
+│   └── main.py              # FastAPI: /risk, /knowledge, /swarm/cycle, /heartbeat/status
+├── dashboard/
+│   └── src/app/             # Next.js ancient cyberspy relic hunter UI
+├── scripts/
+│   ├── deploy.py            # Foundry contract deployer
+│   └── start_heartbeat.sh   # Local daemon launcher
+└── launchd/
+    └── com.silopolis.heartbeat.plist  # macOS 12x/day scheduler
+```
 
 ---
 
-## License
+## Hackathon Submission
 
-MIT — see LICENSE
+**Event:** OKX Build X Hackathon 2026
+**Track:** Best AI Agent Application on X Layer
+**Special Prizes Targeted:** Best MCP Integration · Best Use of Agentic Wallet
+**Builder:** PHENOMENAL MARK (PHENOM3NA1)
+**Deadline:** April 15, 2026 23:59 UTC
+
+---
+
+*Built with OnchainOS · Powered by Living Swarm · Forged on X Layer*
+*Humans forge will. Agents forge skill. In Silopolis, both become unstoppable.*

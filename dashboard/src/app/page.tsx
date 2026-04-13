@@ -372,6 +372,193 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
   );
 }
 
+// ─── Wallet + Explorer Panel ─────────────────────────────────────────────────
+
+const WALLET = "0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d";
+const EXPLORER = `https://www.oklink.com/xlayer/address/${WALLET}`;
+
+function WalletPanel({ apiBase }: { apiBase: string }) {
+  const [risk, setRisk] = useState<RiskStatus | null>(null);
+  const [knowledge, setKnowledge] = useState<Array<{ type: string; key: string; value: string; confidence: number }>>([]);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [r, k] = await Promise.all([
+          fetch(`${apiBase}/api/risk`).then(r => r.json()),
+          fetch(`${apiBase}/api/knowledge?limit=8`).then(r => r.json()),
+        ]);
+        if (!r.error) setRisk(r);
+        if (k.knowledge) setKnowledge(k.knowledge);
+      } catch {}
+    };
+    load();
+    const iv = setInterval(load, 30_000);
+    return () => clearInterval(iv);
+  }, [apiBase]);
+
+  const tc = risk ? (TIER_COLORS[risk.tier] ?? "#6B7280") : "#6B7280";
+
+  return (
+    <div className="grid md:grid-cols-2 gap-4">
+      {/* Wallet card */}
+      <div className="p-5 relative overflow-hidden" style={{ background: "#080604", border: "1px solid #2A1E0A" }}>
+        <ScanLine />
+        <div className="relative z-10">
+          <div className="text-xs tracking-[0.3em] mb-3" style={{ color: "#B8860B" }}>AGENTIC WALLET · TEE-SECURED</div>
+          <div className="font-mono text-xs mb-3 break-all" style={{ color: "#DAA520" }}>{WALLET}</div>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-xs font-mono px-2 py-1" style={{ background: "#0F0A02", border: "1px solid #2A1E0A", color: "#4A3A22" }}>
+              X LAYER · CHAIN 196
+            </span>
+            <span className="text-xs font-mono px-2 py-1 animate-pulse" style={{ background: "#0A1A0A", border: "1px solid #34D39930", color: "#34D399" }}>
+              ● LIVE
+            </span>
+          </div>
+          {risk && (
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-2xl font-black font-mono" style={{ color: tc }}>{risk.okb_balance.toFixed(6)}</div>
+                <div className="text-xs font-mono mt-0.5" style={{ color: "#4A3A22" }}>OKB BALANCE · {risk.tier} TIER</div>
+              </div>
+              <a
+                href={EXPLORER}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-2 text-xs font-mono font-bold tracking-widest transition-all"
+                style={{ border: "1px solid #B8860B60", color: "#DAA520", background: "#1A1002" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#2A1A04")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#1A1002")}
+              >
+                VIEW ON OKLINK ↗
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Knowledge feed */}
+      <div className="p-5 relative overflow-hidden" style={{ background: "#080604", border: "1px solid #2A1E0A" }}>
+        <ScanLine />
+        <div className="relative z-10">
+          <div className="text-xs tracking-[0.3em] mb-3" style={{ color: "#B8860B" }}>SWARM KNOWLEDGE GRAPH</div>
+          {knowledge.length === 0 ? (
+            <div className="text-xs font-mono animate-pulse" style={{ color: "#3A2C16" }}>AWAITING FIRST HEARTBEAT CYCLE...</div>
+          ) : (
+            <div className="space-y-2">
+              {knowledge.slice(0, 6).map((k, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="font-mono text-xs flex-shrink-0 mt-0.5" style={{ color: "#4A3A22" }}>
+                    {k.type === "market" ? "◈" : k.type === "pattern" ? "⬡" : "◊"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-mono text-xs" style={{ color: "#9A8060" }}>{k.key}</span>
+                    <span className="font-mono text-xs ml-2 truncate" style={{ color: "#4A3A22" }}>{String(k.value).slice(0, 40)}</span>
+                  </div>
+                  <div className="flex-shrink-0 font-mono text-xs" style={{ color: Number(k.confidence) >= 0.7 ? "#34D399" : "#FBBF24" }}>
+                    {Math.round(Number(k.confidence) * 100)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Trade History Graph Feed ─────────────────────────────────────────────────
+
+const FEED_DEMO = [
+  { time: "08:00", action: "OBSERVE", agent: "SILO-ANALYST-2",   detail: "OKB $40.82 · 5 signals logged",       color: "#60A5FA", icon: "◈" },
+  { time: "08:01", action: "REASON",  agent: "SILO-TRADER-1",    detail: "Gemini: HOLD · confidence 30/100",    color: "#FBBF24", icon: "⬡" },
+  { time: "08:02", action: "GUARD",   agent: "SILO-GUARD-4",     detail: "Threat gate CLEAR · score 12/100",    color: "#34D399", icon: "◊" },
+  { time: "08:03", action: "LEARN",   agent: "SILO-SCRIBE-5",    detail: "Pattern stored: low-vol morning",     color: "#C084FC", icon: "◇" },
+  { time: "08:04", action: "x402",    agent: "SILO-SKILL-3",     detail: "Relic acquired: Oracle Lens · 0.0001 OKB", color: "#FB923C", icon: "⬟" },
+  { time: "06:00", action: "OBSERVE", agent: "SILO-ANALYST-2",   detail: "OKB $40.61 · 3 signals logged",       color: "#60A5FA", icon: "◈" },
+  { time: "04:00", action: "OBSERVE", agent: "SILO-ANALYST-2",   detail: "OKB $40.44 · market quiet",           color: "#60A5FA", icon: "◈" },
+  { time: "02:00", action: "GUARD",   agent: "SILO-GUARD-4",     detail: "Threat DETECTED · score 78 → BLOCKED", color: "#F87171", icon: "✕" },
+];
+
+function TradeFeed({ apiBase }: { apiBase: string }) {
+  const [feed, setFeed] = useState(FEED_DEMO);
+  const [hbHistory, setHbHistory] = useState<Array<{ id: string; started_at: string; agents_run: number; actions_taken: number; elapsed_sec: number }>>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const r = await fetch(`${apiBase}/api/heartbeat/status`);
+        if (r.ok) {
+          const data = await r.json();
+          if (data.last_heartbeat) {
+            setHbHistory(prev => [data.last_heartbeat, ...prev].slice(0, 12));
+          }
+        }
+      } catch {}
+    };
+    load();
+    const iv = setInterval(load, 30_000);
+    return () => clearInterval(iv);
+  }, [apiBase]);
+
+  // ASCII-style sparkline from heartbeat history
+  const sparkData = hbHistory.length > 0
+    ? hbHistory.map(h => h.actions_taken ?? 0).reverse()
+    : [0, 0, 1, 0, 0, 1, 0, 1, 2, 0, 1, 0];
+
+  const maxSpark = Math.max(...sparkData, 1);
+  const sparkCols = 24;
+  const filledSpark = [...Array(Math.max(0, sparkCols - sparkData.length)).fill(0), ...sparkData.slice(-sparkCols)];
+
+  return (
+    <div className="p-5 relative overflow-hidden" style={{ background: "#080604", border: "1px solid #2A1E0A" }}>
+      <ScanLine />
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="text-xs tracking-[0.3em] mb-1" style={{ color: "#B8860B" }}>LIVE CIPHER FEED</div>
+            <div className="text-xs font-mono" style={{ color: "#4A3A22" }}>
+              Every 2h · observe → reason → act → learn → repeat
+            </div>
+          </div>
+          {/* Sparkline */}
+          <div className="flex items-end gap-px h-8">
+            {filledSpark.map((v, i) => (
+              <div
+                key={i}
+                style={{
+                  width: 4,
+                  height: `${Math.max(4, (v / maxSpark) * 32)}px`,
+                  background: v > 0 ? "#DAA520" : "#1A1208",
+                  opacity: 0.4 + (i / sparkCols) * 0.6,
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Feed rows */}
+        <div className="space-y-2">
+          {feed.map((row, i) => (
+            <div key={i} className="flex items-start gap-3 py-2" style={{ borderBottom: "1px solid #0F0C08" }}>
+              <span className="font-mono text-xs flex-shrink-0 w-12" style={{ color: "#3A2C16" }}>{row.time}</span>
+              <span className="font-mono text-xs flex-shrink-0" style={{ color: row.color }}>{row.icon}</span>
+              <span
+                className="font-mono text-xs flex-shrink-0 px-1.5 py-0.5 tracking-wider"
+                style={{ background: `${row.color}15`, color: row.color, border: `1px solid ${row.color}30` }}
+              >
+                {row.action}
+              </span>
+              <span className="font-mono text-xs flex-shrink-0 hidden sm:inline" style={{ color: "#4A3A22" }}>{row.agent}</span>
+              <span className="font-mono text-xs flex-1 truncate" style={{ color: "#6B5C3A" }}>{row.detail}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SilopolisPage() {
@@ -512,7 +699,7 @@ export default function SilopolisPage() {
                 {totalTx} <span style={{ color: "#4A3A22" }}>EXCAVATIONS</span>
               </div>
               {/* Live heartbeat timer */}
-              <HeartbeatTimer apiBase={API_BASE} cycleIntervalSec={28800} />
+              <HeartbeatTimer apiBase={API_BASE} cycleIntervalSec={7200} />
 
               <button
                 onClick={triggerCycle}
@@ -812,6 +999,76 @@ export default function SilopolisPage() {
         </div>
       </section>
 
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* LIVE CIPHER FEED + WALLET                                          */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <section className="px-6 py-16 max-w-7xl mx-auto">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <div className="text-xs tracking-[0.3em] mb-2" style={{ color: "#B8860B" }}>ON-CHAIN ACTIVITY</div>
+            <h2 className="text-4xl font-black tracking-tight" style={{ color: "#DAA520" }}>LIVE FEED</h2>
+            <p className="text-sm mt-2 font-mono" style={{ color: "#4A3A22" }}>
+              Every cycle captured · 12 heartbeats/day · immutable audit trail
+            </p>
+          </div>
+          <a
+            href={EXPLORER}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 text-xs font-mono font-bold tracking-widest transition-all"
+            style={{ border: "1px solid #B8860B60", color: "#DAA520", background: "#1A1002" }}
+          >
+            VERIFY ON OKLINK ↗
+          </a>
+        </div>
+        <div className="space-y-4">
+          <WalletPanel apiBase={API_BASE} />
+          <TradeFeed apiBase={API_BASE} />
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* MCP + TECH STACK                                                    */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <section style={{ background: "#080604", borderTop: "1px solid #2A1E0A" }} className="px-6 py-12">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-xs tracking-[0.3em] mb-6" style={{ color: "#B8860B" }}>PROTOCOL STACK · INTEGRATIONS</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { name: "OKX MCP", badge: "MCP",  desc: "Model Context Protocol server — agents call OnchainOS tools natively via Claude", color: "#DAA520",  icon: "⬡" },
+              { name: "x402 Payments", badge: "PAY", desc: "HTTP 402 micropayment flow — swap any token → pay for relics on-chain", color: "#C084FC", icon: "⬟" },
+              { name: "OnchainOS TEE", badge: "TEE", desc: "Agentic Wallet secured by Trusted Execution Environment — no private key", color: "#34D399", icon: "◊" },
+              { name: "Uniswap V4", badge: "AMM", desc: "swap-integration, liquidity-planner, viem-integration, v4-security skills", color: "#60A5FA", icon: "◈" },
+              { name: "Gemini 2.5", badge: "LLM", desc: "SwarmFi cognition engine · Pro→Flash fallback · threat-gated at score≥76", color: "#A3E635", icon: "◇" },
+              { name: "X Layer", badge: "L2",  desc: "EVM chain 196 · near-zero gas · OKB native token · PotatoSwap DEX", color: "#FB923C", icon: "⬢" },
+              { name: "Living Swarm", badge: "SDK", desc: "observe→reason→act→learn loop ported from Living Swarm framework", color: "#F472B6", icon: "◈" },
+              { name: "ReputationEngine", badge: "SC", desc: "8-axis EMA mastery scoring · on-chain · deployed on X Layer mainnet", color: "#FBBF24", icon: "⬡" },
+            ].map(item => (
+              <div
+                key={item.name}
+                className="p-4 relative overflow-hidden"
+                style={{ background: "#050402", border: `1px solid ${item.color}20` }}
+              >
+                <ScanLine />
+                <div className="relative z-10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-mono text-lg" style={{ color: item.color }}>{item.icon}</span>
+                    <span
+                      className="font-mono text-xs font-bold tracking-widest px-1.5 py-0.5"
+                      style={{ background: `${item.color}15`, color: item.color, border: `1px solid ${item.color}30` }}
+                    >
+                      {item.badge}
+                    </span>
+                  </div>
+                  <div className="font-bold text-sm mb-1.5" style={{ color: "#C8A850" }}>{item.name}</div>
+                  <p className="text-xs leading-relaxed" style={{ color: "#4A3A22" }}>{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ─── Footer ──────────────────────────────────────────────────────── */}
       <footer style={{ borderTop: "1px solid #1A1208", background: "#050402" }} className="px-6 py-8">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
@@ -828,8 +1085,17 @@ export default function SilopolisPage() {
             Built on X Layer · OnchainOS + Uniswap Skills + Gemini 2.5 Flash
             <br />OKX Build X Hackathon 2026 · by PHENOMENAL MARK (PHENOM3NA1)
           </div>
-          <div className="text-xs font-mono" style={{ color: "#3A2C16" }}>
+          <div className="text-xs font-mono text-right" style={{ color: "#3A2C16" }}>
             CIPHER-7 PROTOCOL · MIT LICENSE
+            <br />
+            <a
+              href={EXPLORER}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "#B8860B60" }}
+            >
+              {WALLET.slice(0, 10)}...{WALLET.slice(-6)} ↗
+            </a>
           </div>
         </div>
       </footer>

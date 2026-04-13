@@ -151,10 +151,25 @@ def agent_memory(agent_name: str, swarm: Swarm = Depends(get_swarm)):
 
 
 @app.post("/api/swarm/cycle")
-def run_cycle(_key: str = Depends(verify_api_key), swarm: Swarm = Depends(get_swarm)):
-    """Trigger one swarm cycle manually (for demo / testing)."""
-    results = swarm.run_once()
-    return {"results": results, "cycle_count": swarm._cycle_count}
+def run_cycle(_key: str = Depends(verify_api_key)):
+    """Trigger one full heartbeat cycle (observe→reason→act→learn) in the background."""
+    import threading
+    import subprocess
+    import sys
+
+    def _run():
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "core.heartbeat"],
+                cwd=os.path.dirname(os.path.dirname(__file__)),
+                timeout=300,
+            )
+        except Exception as e:
+            logger.error("Background heartbeat cycle failed: %s", e)
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return {"status": "cycle_started", "message": "Heartbeat cycle initiated — observe→reason→act→learn running in background"}
 
 
 @app.post("/api/swarm/sync-knowledge")
@@ -205,16 +220,24 @@ def agent_think(
 @app.get("/api/heartbeat/status")
 def heartbeat_status():
     """Live heartbeat status — used by the dashboard timer widget."""
+    import subprocess
     try:
         mem.init_db()
         history = mem.get_heartbeat_history(limit=1)
         last = history[0] if history else None
         all_hb = mem.get_heartbeat_history(limit=1000)
+        # Check if heartbeat process is running
+        try:
+            result = subprocess.run(["pgrep", "-f", "core.heartbeat"], capture_output=True)
+            running = result.returncode == 0
+        except Exception:
+            running = False
+        interval = int(os.environ.get("SILOPOLIS_HEARTBEAT_INTERVAL", "7200").split()[0])
         return {
             "last_heartbeat": last,
             "total_cycles": len(all_hb),
-            "running": False,  # set True if heartbeat process is active
-            "next_interval_sec": 28800,
+            "running": running,
+            "next_interval_sec": interval,
         }
     except Exception as e:
         return {"last_heartbeat": None, "total_cycles": 0, "running": False, "error": str(e)}
