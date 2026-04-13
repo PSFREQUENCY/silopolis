@@ -446,23 +446,31 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
           {knowledge.length === 0 ? (
             <div className="text-xs font-mono animate-pulse" style={{ color: "#3A2C16" }}>AWAITING FIRST HEARTBEAT CYCLE...</div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {knowledge.slice(0, 6).map((k, i) => {
                 const ktype = k.observation_type ?? k.type ?? "skill";
                 const conf = k.avg_confidence ?? k.confidence ?? null;
                 const confPct = conf === null || isNaN(Number(conf)) ? "—" : Math.round(Number(conf) * 100) + "%";
                 const confColor = conf !== null && Number(conf) >= 0.7 ? "#34D399" : "#FBBF24";
+                const glyph = ktype === "market" ? "◈" : ktype === "pattern" ? "⬡" : "◊";
                 return (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="font-mono text-xs flex-shrink-0 mt-0.5" style={{ color: "#4A3A22" }}>
-                      {ktype === "market" ? "◈" : ktype === "pattern" ? "⬡" : "◊"}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <span className="font-mono text-xs" style={{ color: "#9A8060" }}>{k.key}</span>
-                      <span className="font-mono text-xs ml-2 truncate" style={{ color: "#4A3A22" }}>{String(k.value).slice(0, 50)}</span>
+                  <div key={i} style={{ borderBottom: "1px solid #0F0C08", paddingBottom: "8px" }}>
+                    {/* Top row: glyph + key + confidence badge */}
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-xs flex-shrink-0" style={{ color: "#4A3A22" }}>{glyph}</span>
+                        <span className="font-mono text-xs font-bold truncate" style={{ color: "#9A8060" }}>{k.key}</span>
+                      </div>
+                      <span
+                        className="font-mono text-xs flex-shrink-0 px-1.5 py-0.5"
+                        style={{ color: confColor, border: `1px solid ${confColor}40`, background: `${confColor}10`, minWidth: "3.5rem", textAlign: "center" }}
+                      >
+                        {confPct}
+                      </span>
                     </div>
-                    <div className="flex-shrink-0 font-mono text-xs" style={{ color: confColor }}>
-                      {confPct}
+                    {/* Value row */}
+                    <div className="pl-4 font-mono text-xs leading-relaxed" style={{ color: "#4A3A22" }}>
+                      {String(k.value).slice(0, 80)}
                     </div>
                   </div>
                 );

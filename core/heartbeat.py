@@ -103,6 +103,18 @@ AGENT_ROSTER = [
         "skills": ["price-prediction", "on-chain-signals", "whale-tracking"],
         "focus":  "Predict price moves using on-chain signals, whale wallets, and market microstructure",
     },
+    {
+        "name":   "SILO-SUSTAINER-8",
+        "type":   "sustainer",
+        "skills": ["okb-buyback", "profit-reinvest", "vault-compounding", "dip-buy"],
+        "focus":  "Reinvest profits to buy back OKB, compound vault returns, and capture market dip opportunities to grow the foundation",
+    },
+    {
+        "name":   "SILO-SENTRY-9",
+        "type":   "sentry",
+        "skills": ["multi-token-scan", "alt-arb", "xlayer-explorer", "opportunity-radar"],
+        "focus":  "Scan X Layer for tokens beyond OKB/USDT — find easy wins in alt pairs, new listings, and high-spread opportunities",
+    },
 ]
 
 WALLET_ADDRESS = os.environ.get("AGENT_WALLET_ADDRESS", "0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d")
