@@ -560,9 +560,12 @@ def run_heartbeat() -> dict:
                        "timestamp": datetime.now(timezone.utc).isoformat(), "heartbeat_id": heartbeat_id}
         errors += 1
 
-    # REASON → ACT → LEARN for each agent
-    for agent_def in AGENT_ROSTER:
+    # REASON → ACT → LEARN for each agent (staggered to avoid NIM rate limits)
+    for _agent_idx, agent_def in enumerate(AGENT_ROSTER):
         name = agent_def["name"]
+        # Stagger agents 5+ by 3s to avoid NIM rate limit on late agents
+        if _agent_idx >= 5:
+            time.sleep(3)
         try:
             # Reason
             decision = reason(agent_def, observation)

@@ -195,12 +195,19 @@ def _nim_generate(
         "Authorization": f"Bearer {NVIDIA_API_KEY}",
         "Content-Type": "application/json",
     }
-    resp = httpx.post(f"{NIM_BASE}/chat/completions", json=payload, headers=headers, timeout=60.0)
-    if resp.status_code == 404:
-        # Model not available on cloud API — may require local NIM deployment
-        raise EnvironmentError(f"NIM model {NIM_MODEL!r} not found on cloud API (404). Check model ID or use local deployment.")
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"].strip()
+    # Retry up to 3 times on 429 with backoff
+    for attempt in range(3):
+        resp = httpx.post(f"{NIM_BASE}/chat/completions", json=payload, headers=headers, timeout=60.0)
+        if resp.status_code == 404:
+            raise EnvironmentError(f"NIM model {NIM_MODEL!r} not found on cloud API (404).")
+        if resp.status_code == 429:
+            wait = (attempt + 1) * 12  # 12s, 24s, 36s
+            logger.info("[NIM] Rate limited (429) — waiting %ds before retry %d/3", wait, attempt + 1)
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    raise RuntimeError("NIM API rate limit exceeded after 3 retries")
 
 
 # ─── SwarmFi Cognition ────────────────────────────────────────────────────────
