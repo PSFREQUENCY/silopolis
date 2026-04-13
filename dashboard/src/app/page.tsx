@@ -471,23 +471,47 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
 
 // ─── Trade History Graph Feed ─────────────────────────────────────────────────
 
-const FEED_DEMO = [
-  { time: "08:00", action: "OBSERVE", agent: "SILO-ANALYST-2",   detail: "OKB $40.82 · 5 signals logged",       color: "#60A5FA", icon: "◈" },
-  { time: "08:01", action: "REASON",  agent: "SILO-TRADER-1",    detail: "Gemini: HOLD · confidence 30/100",    color: "#FBBF24", icon: "⬡" },
-  { time: "08:02", action: "GUARD",   agent: "SILO-GUARD-4",     detail: "Threat gate CLEAR · score 12/100",    color: "#34D399", icon: "◊" },
-  { time: "08:03", action: "LEARN",   agent: "SILO-SCRIBE-5",    detail: "Pattern stored: low-vol morning",     color: "#C084FC", icon: "◇" },
-  { time: "08:04", action: "x402",    agent: "SILO-SKILL-3",     detail: "Relic acquired: Oracle Lens · 0.0001 OKB", color: "#FB923C", icon: "⬟" },
-  { time: "06:00", action: "OBSERVE", agent: "SILO-ANALYST-2",   detail: "OKB $40.61 · 3 signals logged",       color: "#60A5FA", icon: "◈" },
-  { time: "04:00", action: "OBSERVE", agent: "SILO-ANALYST-2",   detail: "OKB $40.44 · market quiet",           color: "#60A5FA", icon: "◈" },
-  { time: "02:00", action: "GUARD",   agent: "SILO-GUARD-4",     detail: "Threat DETECTED · score 78 → BLOCKED", color: "#F87171", icon: "✕" },
-];
+type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string };
+
+function actionColor(action: string): { color: string; icon: string } {
+  const map: Record<string, { color: string; icon: string }> = {
+    SWAP:    { color: "#DAA520", icon: "⬡" },
+    QUOTE:   { color: "#FB923C", icon: "◈" },
+    OBSERVE: { color: "#60A5FA", icon: "◈" },
+    LEARN:   { color: "#C084FC", icon: "◇" },
+    WAIT:    { color: "#4A3A22", icon: "·" },
+    HOLD:    { color: "#FBBF24", icon: "◊" },
+    ERR:     { color: "#F87171", icon: "✕" },
+  };
+  return map[action] ?? { color: "#6B5C3A", icon: "○" };
+}
 
 function TradeFeed({ apiBase }: { apiBase: string }) {
-  const [feed, setFeed] = useState(FEED_DEMO);
+  const [feed, setFeed] = useState<FeedRow[]>([]);
   const [hbHistory, setHbHistory] = useState<Array<{ id: string; started_at: string; agents_run: number; actions_taken: number; elapsed_sec: number }>>([]);
 
   useEffect(() => {
-    const load = async () => {
+    const loadFeed = async () => {
+      try {
+        const r = await fetch(`${apiBase}/api/feed?limit=12`, { headers: FETCH_HEADERS });
+        if (r.ok) {
+          const data = await r.json();
+          if (data.feed && data.feed.length > 0) {
+            const rows: FeedRow[] = data.feed.map((item: { ts: string; agent: string; action: string; confidence: number; reasoning: string; okb_price: number; outcome: string }) => {
+              const { color, icon } = actionColor(item.action);
+              const ts = new Date(item.ts);
+              const time = ts.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+              const detail = item.reasoning
+                ? `${item.reasoning} · conf ${item.confidence}`
+                : `OKB $${data.okb_price?.toFixed(2)} · conf ${item.confidence}`;
+              return { time, action: item.action, agent: item.agent, detail, color, icon };
+            });
+            setFeed(rows);
+          }
+        }
+      } catch {}
+    };
+    const loadHb = async () => {
       try {
         const r = await fetch(`${apiBase}/api/heartbeat/status`, { headers: FETCH_HEADERS });
         if (r.ok) {
@@ -498,8 +522,9 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
         }
       } catch {}
     };
-    load();
-    const iv = setInterval(load, 30_000);
+    loadFeed();
+    loadHb();
+    const iv = setInterval(() => { loadFeed(); loadHb(); }, 30_000);
     return () => clearInterval(iv);
   }, [apiBase]);
 

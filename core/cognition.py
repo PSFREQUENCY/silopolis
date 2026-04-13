@@ -29,6 +29,11 @@ GEMINI_KEY  = os.environ.get("GEMINI_API_KEY", "")
 FLASH_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 PRO_MODEL   = "gemini-2.5-pro"
 
+# NVIDIA NIM / MiniMax M2.7 (cloud inference — 6-month free tier)
+NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
+NIM_BASE       = "https://integrate.api.nvidia.com/v1"
+NIM_MODEL      = os.environ.get("NIM_MODEL", "MiniMaxAI/MiniMax-M2.7")
+
 
 # ─── Threat Gate (ported from Living Swarm arbiter-05) ────────────────────────
 
@@ -165,6 +170,36 @@ def _gemini_generate(
     return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 
+# ─── NVIDIA NIM Client (MiniMax M2.7) ─────────────────────────────────────────
+
+def _nim_generate(
+    prompt: str,
+    system: str = "",
+    temperature: float = 0.7,
+    max_tokens: int = 1024,
+) -> str:
+    """Call MiniMax M2.7 via NVIDIA cloud inference API (OpenAI-compatible)."""
+    if not NVIDIA_API_KEY:
+        raise EnvironmentError("NVIDIA_API_KEY not set")
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    payload = {
+        "model": NIM_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    headers = {
+        "Authorization": f"Bearer {NVIDIA_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    resp = httpx.post(f"{NIM_BASE}/chat/completions", json=payload, headers=headers, timeout=60.0)
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()
+
+
 # ─── SwarmFi Cognition ────────────────────────────────────────────────────────
 
 @dataclass
@@ -257,16 +292,29 @@ class SwarmFiCognition:
             if model == PRO_MODEL:
                 emit(f"⚠ Pro unavailable ({e}), falling back to Flash...")
                 model = FLASH_MODEL
-                response = _gemini_generate(
-                    model=model,
-                    prompt=prompt,
-                    system=system,
-                    temperature=0.7,
-                    max_tokens=self.max_tokens,
-                )
+                try:
+                    response = _gemini_generate(
+                        model=model,
+                        prompt=prompt,
+                        system=system,
+                        temperature=0.7,
+                        max_tokens=self.max_tokens,
+                    )
+                except Exception as e2:
+                    if NVIDIA_API_KEY:
+                        emit(f"⚠ Gemini Flash unavailable ({e2}), routing to MiniMax M2.7 via NIM...")
+                        model = NIM_MODEL
+                        response = _nim_generate(prompt=prompt, system=system, temperature=0.7, max_tokens=self.max_tokens)
+                    else:
+                        raise
             else:
-                emit(f"❌ Cognition error: {e}")
-                raise
+                if NVIDIA_API_KEY:
+                    emit(f"⚠ Gemini Flash unavailable ({e}), routing to MiniMax M2.7 via NIM...")
+                    model = NIM_MODEL
+                    response = _nim_generate(prompt=prompt, system=system, temperature=0.7, max_tokens=self.max_tokens)
+                else:
+                    emit(f"❌ Cognition error: {e}")
+                    raise
         latency_ms = int((time.time() - t0) * 1000)
         tokens_est = len(response.split()) * 2
         emit(f"✅ Response ready ({latency_ms}ms, ~{tokens_est} tokens, model={model})")

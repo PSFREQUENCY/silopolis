@@ -45,7 +45,7 @@ class RiskTier:
 RISK_TIERS = [
     RiskTier("SEED",   0.000, 0.00000, 0.00000, 100, False, False,
              "Vault too small — observe markets, build knowledge, zero risk"),
-    RiskTier("MICRO",  0.001, 0.00010, 0.00030,  60, False, True,
+    RiskTier("MICRO",  0.001, 0.00010, 0.00500,  60, False, True,
              "Micro swaps only — prove system generates returns before scaling"),
     RiskTier("SMALL",  0.010, 0.00100, 0.00300,  50, False, True,
              "Small positions — compound winners, cut losses fast"),
