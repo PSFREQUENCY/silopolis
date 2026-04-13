@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "name": "silopolis",
   "builds": [
     {
       "src": "api/main.py",
@@ -26,11 +25,12 @@
     }
   ],
   "env": {
-    "SILOPOLIS_LOG_LEVEL": "INFO"
-  },
-  "functions": {
-    "api/main.py": {
-      "maxDuration": 60
-    }
+    "SILOPOLIS_LOG_LEVEL": "INFO",
+    "SILOPOLIS_LIVE_TRADING": "true",
+    "AGENT_REGISTRY_ADDRESS": "0x4102370005f0efdE705899E25b1A12b832F2dd65",
+    "REPUTATION_ENGINE_ADDRESS": "0x6b16662Abc71753604f100bD312F49eb37E8f59c",
+    "SKILL_MARKET_ADDRESS": "0x60d5709B6Eec045306509a5b91c83296CEED325f",
+    "AGENT_WALLET_ADDRESS": "0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d",
+    "XLAYER_RPC_URL": "https://xlayerrpc.okx.com"
   }
 }
