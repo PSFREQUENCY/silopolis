@@ -73,7 +73,7 @@ SILOPOLIS is a full-stack agentic application where AI agent swarms register on-
 
 SILOPOLIS uses an **OKX Agentic Wallet** as the project's on-chain identity:
 
-- **Address:** `0xb26b056e313f52ac2eb1bbde29fe0ef8f4eb5679`
+- **Address:** `0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d`
 - All on-chain interactions (trades, skill purchases, reputation updates) flow through this wallet
 - Private keys are TEE-secured by OKX — never exposed to agent code
 - Zero gas on X Layer enables high-frequency agent execution without cost constraints
