@@ -204,6 +204,67 @@ def observe(heartbeat_id: str) -> dict:
 
 # ─── Reasoning Phase ─────────────────────────────────────────────────────────
 
+def _extract_json(text: str) -> dict | None:
+    """Robustly extract a JSON object from Gemini response."""
+    import re
+
+    # Strip markdown code fences
+    cleaned = re.sub(r"```(?:json)?\s*", "", text).replace("```", "").strip()
+
+    # Try 1: direct parse
+    try:
+        d = json.loads(cleaned)
+        if isinstance(d, dict):
+            return d
+    except Exception:
+        pass
+
+    # Try 2: find first { and scan forward to find the matching }
+    start = cleaned.find("{")
+    if start < 0:
+        start = text.find("{")
+        if start < 0:
+            cleaned_for_regex = text
+        else:
+            cleaned_for_regex = text[start:]
+    else:
+        cleaned_for_regex = cleaned[start:]
+
+    # Find ALL possible } positions from back to front and try parsing
+    src = cleaned[start:] if start >= 0 else cleaned
+    for end in range(len(src), 0, -1):
+        if src[end - 1] == "}":
+            candidate = src[:end]
+            try:
+                d = json.loads(candidate)
+                if isinstance(d, dict) and "action" in d:
+                    return d
+            except Exception:
+                # Try fixing trailing commas
+                try:
+                    fixed = re.sub(r",\s*([\]}])", r"\1", candidate)
+                    d = json.loads(fixed)
+                    if isinstance(d, dict) and "action" in d:
+                        return d
+                except Exception:
+                    continue
+
+    # Try 3: regex extraction of key fields (last resort)
+    search_in = cleaned if cleaned else text
+    action_m = re.search(r'"action"\s*:\s*"([^"]+)"', search_in)
+    conf_m = re.search(r'"confidence"\s*:\s*(\d+)', search_in)
+    reason_m = re.search(r'"reasoning"\s*:\s*"((?:[^"\\]|\\.)*)"', search_in)
+    if action_m:
+        return {
+            "action": action_m.group(1),
+            "confidence": int(conf_m.group(1)) if conf_m else 50,
+            "reasoning": reason_m.group(1) if reason_m else search_in[:200],
+            "params": {},
+            "knowledge_to_record": [],
+        }
+    return None
+
+
 def reason(agent_def: dict, observation: dict) -> dict:
     """Run SwarmFi cognition for one agent. Returns decision dict."""
     name = agent_def["name"]
@@ -293,25 +354,23 @@ Return ONLY valid JSON (no markdown, no code blocks):
 
     try:
         result = cog.think(prompt)
-        # Parse JSON from response
         text = result.response
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        if start >= 0 and end > start:
-            decision = json.loads(text[start:end])
-        else:
-            decision = {"action": "wait", "reasoning": text[:200], "confidence": 30, "params": {}, "knowledge_to_record": []}
 
-        decision["_meta"] = {
-            "model": result.model,
-            "latency_ms": result.latency_ms,
-            "threat": None,
-        }
+        decision = _extract_json(text)
+        if decision is None:
+            logger.warning("[reason] %s — JSON parse failed, raw: %s", name, text[:200])
+            decision = {"action": "wait", "reasoning": text[:200], "confidence": 30,
+                        "params": {}, "knowledge_to_record": []}
+
+        decision["_meta"] = {"model": result.model, "latency_ms": result.latency_ms, "threat": None}
+        logger.info("[reason] %s decided: action=%s confidence=%s",
+                    name, decision.get("action"), decision.get("confidence"))
         return decision
 
     except Exception as e:
         logger.error("[reason] %s cognition error: %s", name, e)
-        return {"action": "wait", "reasoning": f"error: {e}", "confidence": 0, "params": {}, "knowledge_to_record": [], "_meta": {}}
+        return {"action": "wait", "reasoning": f"error: {e}", "confidence": 0,
+                "params": {}, "knowledge_to_record": [], "_meta": {}}
 
 
 # ─── Action Phase ─────────────────────────────────────────────────────────────
