@@ -380,7 +380,7 @@ const EXPLORER = `https://www.oklink.com/xlayer/address/${WALLET}`;
 
 function WalletPanel({ apiBase }: { apiBase: string }) {
   const [risk, setRisk] = useState<RiskStatus | null>(null);
-  const [knowledge, setKnowledge] = useState<Array<{ type: string; key: string; value: string; confidence: number }>>([]);
+  const [knowledge, setKnowledge] = useState<Array<{ observation_type?: string; type?: string; key: string; value: string; avg_confidence?: number; confidence?: number }>>([]);
   useEffect(() => {
     const load = async () => {
       try {
@@ -447,20 +447,26 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
             <div className="text-xs font-mono animate-pulse" style={{ color: "#3A2C16" }}>AWAITING FIRST HEARTBEAT CYCLE...</div>
           ) : (
             <div className="space-y-2">
-              {knowledge.slice(0, 6).map((k, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <span className="font-mono text-xs flex-shrink-0 mt-0.5" style={{ color: "#4A3A22" }}>
-                    {k.type === "market" ? "◈" : k.type === "pattern" ? "⬡" : "◊"}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <span className="font-mono text-xs" style={{ color: "#9A8060" }}>{k.key}</span>
-                    <span className="font-mono text-xs ml-2 truncate" style={{ color: "#4A3A22" }}>{String(k.value).slice(0, 40)}</span>
+              {knowledge.slice(0, 6).map((k, i) => {
+                const ktype = k.observation_type ?? k.type ?? "skill";
+                const conf = k.avg_confidence ?? k.confidence ?? null;
+                const confPct = conf === null || isNaN(Number(conf)) ? "—" : Math.round(Number(conf) * 100) + "%";
+                const confColor = conf !== null && Number(conf) >= 0.7 ? "#34D399" : "#FBBF24";
+                return (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="font-mono text-xs flex-shrink-0 mt-0.5" style={{ color: "#4A3A22" }}>
+                      {ktype === "market" ? "◈" : ktype === "pattern" ? "⬡" : "◊"}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-mono text-xs" style={{ color: "#9A8060" }}>{k.key}</span>
+                      <span className="font-mono text-xs ml-2 truncate" style={{ color: "#4A3A22" }}>{String(k.value).slice(0, 50)}</span>
+                    </div>
+                    <div className="flex-shrink-0 font-mono text-xs" style={{ color: confColor }}>
+                      {confPct}
+                    </div>
                   </div>
-                  <div className="flex-shrink-0 font-mono text-xs" style={{ color: Number(k.confidence) >= 0.7 ? "#34D399" : "#FBBF24" }}>
-                    {isNaN(Number(k.confidence)) ? "—" : Math.round(Number(k.confidence) * 100) + "%"}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
