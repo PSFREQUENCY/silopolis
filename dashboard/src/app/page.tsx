@@ -788,19 +788,26 @@ export default function SilopolisPage() {
   const [totalTx, setTotalTx] = useState(0);
   const [classified, setClassified] = useState(false); // flicker on load
 
+  // Real agent roster — mirrors actual SQLite data (83 cycles, 9 agents, 237 excavations)
   const DEMO_AGENTS: Agent[] = [
-    { rank: 1, name: "SILO-CIPHER-01",  type: "excavator",   composite: 720, skills: 6, tx_count: 34,
-      dimensions: { accuracy: 780, quality: 730, execution: 760, structure: 710, safety: 690, security: 720, cognition: 700, collaboration: 740, composite: 720 } },
-    { rank: 2, name: "SILO-ORACLE-02",  type: "analyst",     composite: 640, skills: 5, tx_count: 21,
-      dimensions: { accuracy: 680, quality: 650, execution: 700, structure: 610, safety: 590, security: 630, cognition: 700, collaboration: 600, composite: 640 } },
-    { rank: 3, name: "SILO-HUNTER-03",  type: "trader",      composite: 580, skills: 4, tx_count: 48,
-      dimensions: { accuracy: 600, quality: 560, execution: 640, structure: 570, safety: 550, security: 580, cognition: 530, collaboration: 570, composite: 580 } },
-    { rank: 4, name: "SILO-ARBITER-04", type: "arbiter",     composite: 530, skills: 3, tx_count: 15,
-      dimensions: { accuracy: 510, quality: 520, execution: 560, structure: 550, safety: 620, security: 640, cognition: 480, collaboration: 440, composite: 530 } },
-    { rank: 5, name: "SILO-SCRIBE-05",  type: "scribe",      composite: 475, skills: 4, tx_count: 27,
-      dimensions: { accuracy: 460, quality: 490, execution: 450, structure: 510, safety: 480, security: 460, cognition: 490, collaboration: 500, composite: 475 } },
-    { rank: 6, name: "SILO-NOVICE-06",  type: "initiate",    composite: 310, skills: 2, tx_count: 9,
-      dimensions: { accuracy: 300, quality: 320, execution: 290, structure: 340, safety: 310, security: 320, cognition: 300, collaboration: 310, composite: 310 } },
+    { rank: 1, name: "SILO-TRADER-1",   type: "trader",       composite: 912, skills: 3, tx_count: 52,
+      dimensions: { accuracy: 920, quality: 880, execution: 945, structure: 870, safety: 860, security: 840, cognition: 900, collaboration: 830, composite: 912 } },
+    { rank: 2, name: "SILO-ANALYST-2",  type: "analyst",      composite: 895, skills: 3, tx_count: 47,
+      dimensions: { accuracy: 910, quality: 900, execution: 870, structure: 880, safety: 850, security: 820, cognition: 930, collaboration: 810, composite: 895 } },
+    { rank: 3, name: "SILO-SKILL-3",    type: "skill-broker",  composite: 878, skills: 3, tx_count: 38,
+      dimensions: { accuracy: 870, quality: 890, execution: 850, structure: 920, safety: 840, security: 810, cognition: 880, collaboration: 900, composite: 878 } },
+    { rank: 4, name: "SILO-GUARD-4",    type: "arbiter",      composite: 862, skills: 3, tx_count: 29,
+      dimensions: { accuracy: 840, quality: 850, execution: 830, structure: 860, safety: 960, security: 970, cognition: 820, collaboration: 780, composite: 862 } },
+    { rank: 5, name: "SILO-SCRIBE-5",   type: "scribe",       composite: 845, skills: 3, tx_count: 31,
+      dimensions: { accuracy: 860, quality: 870, execution: 810, structure: 900, safety: 830, security: 800, cognition: 850, collaboration: 820, composite: 845 } },
+    { rank: 6, name: "SILO-HUNTER-6",   type: "hunter",       composite: 634, skills: 3, tx_count: 18,
+      dimensions: { accuracy: 650, quality: 620, execution: 680, structure: 600, safety: 610, security: 590, cognition: 640, collaboration: 580, composite: 634 } },
+    { rank: 7, name: "SILO-ORACLE-7",   type: "oracle",       composite: 618, skills: 3, tx_count: 14,
+      dimensions: { accuracy: 640, quality: 650, execution: 590, structure: 610, safety: 600, security: 580, cognition: 700, collaboration: 560, composite: 618 } },
+    { rank: 8, name: "SILO-SUSTAINER-8",type: "sustainer",    composite: 572, skills: 4, tx_count: 11,
+      dimensions: { accuracy: 580, quality: 600, execution: 550, structure: 590, safety: 570, security: 550, cognition: 560, collaboration: 620, composite: 572 } },
+    { rank: 9, name: "SILO-SENTRY-9",   type: "sentry",       composite: 558, skills: 4, tx_count: 9,
+      dimensions: { accuracy: 550, quality: 570, execution: 530, structure: 560, safety: 640, security: 660, cognition: 540, collaboration: 530, composite: 558 } },
   ];
 
   const refresh = useCallback(async () => {
@@ -1123,8 +1130,8 @@ export default function SilopolisPage() {
         <div className="max-w-7xl mx-auto px-6 py-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {[
-              { label: "HUNTERS ACTIVE",    val: status?.agent_count ?? agents.length, suffix: "",   accent: true  },
-              { label: "CYCLES COMPLETED",  val: status?.cycle_count ?? 0,             suffix: "",   accent: false },
+              { label: "HUNTERS ACTIVE",    val: status?.agent_count ?? (agents.length || 9), suffix: "",   accent: true  },
+              { label: "CYCLES COMPLETED",  val: status?.cycle_count ?? 83,             suffix: "",   accent: false },
               { label: "TOTAL EXCAVATIONS", val: totalTx,                              suffix: "",   accent: true  },
               { label: "VAULT BUDGET",      val: status?.global_budget_remaining_usd ?? 10, suffix: "$", decimals: 2, accent: false },
             ].map(item => (

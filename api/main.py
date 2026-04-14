@@ -528,6 +528,33 @@ def cipher_feed(limit: int = 20):
         return {"feed": [], "error": str(e)}
 
 
+@app.get("/api/prices")
+def live_prices():
+    """Live token prices from market_snapshots — for the dashboard ticker."""
+    import sqlite3
+    from pathlib import Path
+    try:
+        db_path = Path(__file__).parent.parent / "data" / "silopolis.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        snaps = conn.execute("""
+            SELECT token_pair, price_usd FROM market_snapshots
+            WHERE timestamp = (
+                SELECT MAX(timestamp) FROM market_snapshots m2
+                WHERE m2.token_pair = market_snapshots.token_pair
+            )
+        """).fetchall()
+        conn.close()
+        prices: dict = {}
+        for s in snaps:
+            sym = s["token_pair"].split("/")[0]
+            prices[sym] = float(s["price_usd"])
+        return {"prices": prices, "ok": True}
+    except Exception as e:
+        logger.error("Prices error: %s", e)
+        return {"prices": {}, "ok": False, "error": str(e)}
+
+
 @app.get("/health")
 def health():
     return {"ok": True}

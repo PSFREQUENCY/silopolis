@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SILOPOLIS — FastAPI Server LaunchAgent
+  ======================================
+  Keeps the API server alive on localhost:8000 so the localtunnel
+  (https://silopolis-api.loca.lt) always has something to forward to.
+
+  KeepAlive: true  → launchd restarts on any exit
+  RunAtLoad: true  → starts immediately on plist load / system boot
+  ThrottleInterval → 10s cooldown between crash-restarts
+
+  Logs:
+    tail -f /tmp/silopolis-api.log
+    tail -f /tmp/silopolis-api.err
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.silopolis.api</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/funmen/silopolis/scripts/start_api.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/funmen/silopolis</string>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/silopolis-api.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/silopolis-api.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/funmen</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+</dict>
+</plist>
