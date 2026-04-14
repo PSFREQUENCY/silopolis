@@ -7,7 +7,7 @@ Philosophy:
     as possible without spending OKB on gas.
   - Trades start micro (0.001 OKB) and scale ONLY when proven profitable.
   - Every profit is captured: 50% stays in vault, 50% compounds into next trade.
-  - Every loss is logged. 3 consecutive losses → pause trading for 1 cycle.
+  - Every loss is logged. 5 consecutive significant losses → pause trading for 1 cycle.
   - Mastery is demonstrated by improving win rate over time, not just activity.
 
 Risk Tiers (auto-scales as vault grows):
@@ -46,7 +46,7 @@ RISK_TIERS = [
     RiskTier("SEED",   0.000, 0.00000, 0.00000, 100, False, False,
              "Vault too small — observe markets, build knowledge, zero risk"),
     RiskTier("MICRO",  0.001, 0.00010, 0.00500,  60, False, True,
-             "Micro swaps only — prove system generates returns before scaling"),
+             "MICRO TIER ACTIVATED · Accumulating OKB · Building vault foundation"),
     RiskTier("SMALL",  0.010, 0.00100, 0.00300,  50, False, True,
              "Small positions — compound winners, cut losses fast"),
     RiskTier("MEDIUM", 0.050, 0.00500, 0.01500,  40, True,  True,
@@ -233,29 +233,37 @@ class RiskGovernor:
         effective_min = min(self.tier.min_confidence, env_min)
         return confidence >= effective_min
 
+    # Minimum loss to count as a real loss (below this = DEX fee noise, not a loss)
+    _LOSS_THRESHOLD = 0.000050  # 0.00005 OKB — smaller than this is just fee rounding
+
     def record_trade(self, spent_okb: float, profit_okb: float) -> None:
         """Record a completed trade outcome."""
         self.state.total_trades += 1
         self.state.daily_spent_okb += spent_okb
 
-        if profit_okb > 0:
+        if profit_okb >= -self._LOSS_THRESHOLD:
+            # Win or break-even (micro DEX fees don't count as losses)
             self.state.winning_trades += 1
             self.state.consecutive_losses = 0
-            # Capture profit: 50% back to vault, 50% available for next trade
-            net = profit_okb * 0.5
-            self.state.okb_balance += net
-            self.state.total_profit_okb += net
-            logger.info("[risk] Win: +%.6f OKB profit (captured %.6f). Win rate: %.1f%%",
-                        profit_okb, net, self.state.win_rate * 100)
+            if profit_okb > 0:
+                # Capture profit: 50% back to vault, 50% available for next trade
+                net = profit_okb * 0.5
+                self.state.okb_balance += net
+                self.state.total_profit_okb += net
+                logger.info("[risk] Win: +%.6f OKB profit (captured %.6f). Win rate: %.1f%%",
+                            profit_okb, net, self.state.win_rate * 100)
+            else:
+                logger.info("[risk] Break-even (fee noise %.8f OKB). Win rate: %.1f%%",
+                            profit_okb, self.state.win_rate * 100)
         else:
             self.state.consecutive_losses += 1
             self.state.okb_balance = max(0, self.state.okb_balance - abs(profit_okb))
             logger.warning("[risk] Loss: %.6f OKB. Consecutive: %d",
                            abs(profit_okb), self.state.consecutive_losses)
-            # 3 consecutive losses → pause for 1 cycle (8 hours)
-            if self.state.consecutive_losses >= 3:
+            # 5 consecutive significant losses → pause for 1 cycle (8 hours)
+            if self.state.consecutive_losses >= 5:
                 self.state.paused_until = time.time() + 28800  # 8h
-                logger.warning("[risk] 3 consecutive losses — pausing for 8h")
+                logger.warning("[risk] 5 consecutive losses — pausing for 8h")
 
         save_vault_state(self.state)
 

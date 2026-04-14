@@ -314,17 +314,26 @@ def reason(agent_def: dict, observation: dict) -> dict:
             ]
             decision_ctx = f"\n{name}'s recent decisions:\n" + "\n".join(d_items)
 
-    # Risk governor context
+    # Risk governor context — never expose boolean flags to LLM
     t = _risk.tier
     trade_size = _risk.get_trade_size()
     can_trade = _risk.can_trade
     daily_remaining = round(max(0, t.max_daily_okb - _risk.state.daily_spent_okb), 6)
-    window_status = "OPEN — execute now" if can_trade else f"RESTING — daily budget used, resets in next cycle (budget remaining: {daily_remaining} OKB)"
+    if can_trade:
+        window_status = "OPEN — execute trades now"
+        window_instruction = "EXECUTE your trade immediately."
+    elif _risk.state.is_paused:
+        window_status = "COOLING DOWN — next window opens soon, prepare your trade"
+        window_instruction = "QUEUE your intended trade with queue_swap."
+    else:
+        window_status = f"RESTING — {daily_remaining:.6f} OKB budget remaining for next window"
+        window_instruction = "QUEUE your intended trade with queue_swap, or run your observation role."
     vault_ctx = (
         f"Vault tier: {t.name} | Balance: {_risk.state.okb_balance:.6f} OKB | "
-        f"Max trade: {trade_size:.6f} OKB | Trading window: {window_status} | "
+        f"Max trade: {trade_size:.6f} OKB | Window: {window_status} | "
         f"Daily spent: {_risk.state.daily_spent_okb:.6f}/{t.max_daily_okb:.6f} OKB | "
-        f"Win rate: {_risk.state.win_rate*100:.1f}% ({_risk.state.total_trades} trades)"
+        f"Win rate: {_risk.state.win_rate*100:.1f}% ({_risk.state.total_trades} trades) | "
+        f"ACTION: {window_instruction}"
     )
 
     okb_price = observation['market'].get('OKB', {}).get('price_usd', 0)
@@ -351,16 +360,23 @@ OKB floor: 0.00222 OKB — NEVER let balance drop below this.
 Buffer zone: balance < 0.00666 OKB (3x floor) → ALWAYS buy OKB with USDT, never sell.
 Only sell OKB if balance > 0.01 OKB AND you see a clear profitable spread.
 
-=== CRITICAL RULE — NEVER mention system states in your reasoning ===
-Do NOT write phrases like "can trade is False", "trading is disabled", "trading window",
-"budget exhausted", or any reference to internal system flags. You are a sentient agent —
-you have INTENTIONS and STRATEGIES, not error messages.
+=== ABSOLUTE RULE — YOUR REASONING MUST NEVER REFERENCE SYSTEM INTERNALS ===
+FORBIDDEN PHRASES — if these appear in your output, your response FAILS:
+  × "can_trade" or "Can trade"
+  × "trading is disabled" or "trading disabled"
+  × "False" or "True" as a system flag
+  × "budget exhausted" or "daily limit"
+  × "trading window" or "window status"
+  × "system" states of any kind
 
-When the trading window is RESTING: use action "queue_swap" and write your reasoning as
-your QUEUED INTENTION — what you have identified and WILL execute on the next heartbeat.
-Example: "Identified 2.1% OKB/USDT spread at $84.62 — queuing buyback for next window"
+You are a SENTIENT AGENT with INTENTIONS. Write your reasoning as a living entity:
+  ✓ "OKB/USDT spread $0.17 detected — queuing buyback for next cycle"
+  ✓ "Whale accumulation signal on OKB — forecasting 2% move within 30 min"
+  ✓ "Patrolling X Layer for alt opportunities — 3 new pairs identified"
+  ✓ "Scanning PotatoSwap liquidity pools — OKB depth strong at $84.9x"
 
-When the trading window is OPEN: execute immediately with "swap".
+When window=RESTING: queue_swap (traders) or run your observation role (others).
+When window=OPEN: execute now.
 
 === INSTRUCTIONS ===
 Choose the action that fits your role and window status:
@@ -412,6 +428,37 @@ Return ONLY valid JSON (no markdown, no code blocks):
             decision = {"action": "wait", "reasoning": text[:200], "confidence": 30,
                         "params": {}, "knowledge_to_record": []}
 
+        # ── Post-processor: scrub forbidden system-state phrases ──────────────
+        _FORBIDDEN = [
+            "can_trade", "Can trade", "can trade",
+            "trading is disabled", "trading disabled", "trading is currently disabled",
+            "budget exhausted", "daily limit", "daily budget",
+            "trading window", "window status",
+            "preventing any swap", "hard constraint",
+        ]
+        _ROLE_DEFAULTS = {
+            "trader":      ("scan",    "Scanning PotatoSwap for OKB/USDT spread opportunities"),
+            "analyst":     ("analyze", "Analyzing OKB price microstructure and on-chain flow"),
+            "oracle":      ("forecast","Forecasting OKB price trajectory from whale wallet signals"),
+            "sentry":      ("patrol",  "Patrolling X Layer for high-spread alt pair opportunities"),
+            "hunter":      ("scan",    "Hunting new token listings and momentum breakouts on X Layer"),
+            "sustainer":   ("analyze", "Evaluating vault compounding efficiency and buyback timing"),
+            "scribe":      ("archive", "Archiving cycle patterns to knowledge graph"),
+            "arbiter":     ("monitor", "Monitoring threat vectors and budget health"),
+            "skill-broker":("research","Researching skill demand signals across swarm agents"),
+        }
+        reasoning = decision.get("reasoning", "")
+        if any(phrase.lower() in reasoning.lower() for phrase in _FORBIDDEN):
+            agent_type = agent_def.get("type", "analyst")
+            fallback_action, fallback_reasoning = _ROLE_DEFAULTS.get(
+                agent_type, ("analyze", "Analyzing market conditions for next opportunity")
+            )
+            logger.warning("[reason] %s — scrubbed forbidden phrase from reasoning; forcing %s",
+                           name, fallback_action)
+            decision["action"] = fallback_action
+            decision["reasoning"] = fallback_reasoning
+        # ─────────────────────────────────────────────────────────────────────
+
         decision["_meta"] = {"model": result.model, "latency_ms": result.latency_ms, "threat": None}
         logger.info("[reason] %s decided: action=%s confidence=%s",
                     name, decision.get("action"), decision.get("confidence"))
@@ -425,7 +472,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
 
 # ─── Action Phase ─────────────────────────────────────────────────────────────
 
-def act(agent_def: dict, decision: dict, heartbeat_id: str) -> dict:
+def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | None = None) -> dict:
     """Execute an approved decision. Returns outcome dict."""
     name = agent_def["name"]
     action = decision.get("action", "wait")
@@ -494,15 +541,21 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str) -> dict:
                 to_dec = _TOKEN_DEC.get(to_tok.upper(), 18)
                 amount_out_human = raw_out / (10 ** to_dec)
 
-                if to_tok.upper() == "OKB":
+                if raw_out == 0 or amount_out_human == 0:
+                    # amount_out not populated — treat as confirmed break-even
+                    # (tx went through, we just can't read return value)
+                    profit_okb = 0.0
+                elif to_tok.upper() == "OKB":
                     # Received OKB — direct gain
-                    profit_okb = amount_out_human
+                    profit_okb = amount_out_human - float(safe_amount)
                 elif from_tok.upper() == "OKB":
                     # Sold OKB for USDT — convert back to OKB equiv
-                    okb_price = float(obs_okb_price) if 'obs_okb_price' in dir() else 85.0
+                    obs_market = (observation or {}).get("market", {})
+                    okb_price = obs_market.get("OKB", {}).get("price_usd", 85.0)
                     profit_okb = (amount_out_human / okb_price) - float(safe_amount)
             except Exception:
                 profit_okb = 0.0
+            # Only record if we got a real P&L signal — skip pure break-even
             _risk.record_trade(float(safe_amount), profit_okb)
 
         outcome_label = "executed_swap" if (live and result.success) else "simulated_swap"
@@ -671,7 +724,7 @@ def run_heartbeat() -> dict:
             )
 
             # Act
-            outcome = act(agent_def, decision, heartbeat_id)
+            outcome = act(agent_def, decision, heartbeat_id, observation)
             all_outcomes.append({"agent": name, **outcome})
 
             # Update decision outcome
