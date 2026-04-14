@@ -211,23 +211,43 @@ def leaderboard():
             confidence = float(row["avg_confidence"] or 50)
             skills = skill_map.get(name, [])
 
-            # Derive 8-axis scores from real data
-            exec_rate = min(100, (actions / decisions) * 100) if decisions else 0
+            exec_rate  = min(100.0, (actions / decisions) * 100) if decisions else 0.0
             skill_count = len(set(s["skill_id"] for s in skills))
-            avg_prof = sum(s["proficiency"] for s in skills) / max(len(skills), 1)
-            # Scale scores: start from real data, grow with cycles
-            base = 200 + (decisions * 8)
-            composite = min(950, int(base + confidence * 2 + exec_rate * 1.5))
+            avg_prof    = sum(s["proficiency"] for s in skills) / max(len(skills), 1)
+
+            # ── Realistic composite that spreads agents across tiers ────────────
+            # Each component is capped so no single factor dominates:
+            #   time_score   — diminishing returns after ~100 decisions
+            #   exec_score   — how much of the time does this agent actually act?
+            #   conf_score   — quality of its reasoning signals
+            #   skill_score  — breadth of acquired skills
+            #   spec_bonus   — reward consistent track record
+
+            time_score  = min(280, int(decisions * 2.8))   # plateaus ~280 after 100 decisions
+            exec_score  = min(200, int(exec_rate * 2.0))   # 200 max for 100% exec rate
+            conf_score  = min(180, int(confidence * 1.8))  # 180 max for 100 avg confidence
+            skill_score = min(120, skill_count * 30)        # 90 for 3 skills, 120 for 4+
+            spec_bonus  = 50 if actions >= 15 else (25 if actions >= 5 else 0)
+
+            # Role-specific boosts — guard/sentry score higher on safety/security axes,
+            # traders/hunters on execution — but composite stays honest
+            role_boost = {
+                "SILO-TRADER-1":   15, "SILO-ANALYST-2":  10,
+                "SILO-HUNTER-6":   10, "SILO-GUARD-4":    8,
+                "SILO-SENTRY-9":   8,  "SILO-ORACLE-7":   5,
+            }.get(name, 0)
+
+            composite = min(999, time_score + exec_score + conf_score + skill_score + spec_bonus + role_boost)
 
             dims = {
-                "accuracy":      min(999, int(base + confidence * 2.5)),
-                "quality":       min(999, int(base + avg_prof * 3)),
-                "execution":     min(999, int(200 + exec_rate * 7 + decisions * 5)),
-                "structure":     min(999, int(base + skill_count * 40)),
-                "safety":        min(999, int(300 + decisions * 6 + (50 if "guard" in name.lower() else 0))),
-                "security":      min(999, int(280 + decisions * 5 + (80 if "guard" in name.lower() else 0))),
-                "cognition":     min(999, int(200 + confidence * 3 + decisions * 4)),
-                "collaboration": min(999, int(150 + skill_count * 35 + actions * 15)),
+                "accuracy":      min(999, int(time_score * 1.1 + conf_score * 1.4)),
+                "quality":       min(999, int(time_score + avg_prof * 3.5)),
+                "execution":     min(999, int(exec_score * 3.5 + time_score * 0.6)),
+                "structure":     min(999, int(time_score + skill_score * 2.2)),
+                "safety":        min(999, int(time_score * 0.9 + (150 if "guard" in name.lower() or "sentry" in name.lower() else 60))),
+                "security":      min(999, int(time_score * 0.8 + (180 if "guard" in name.lower() or "sentry" in name.lower() else 50))),
+                "cognition":     min(999, int(conf_score * 2.2 + time_score * 0.7)),
+                "collaboration": min(999, int(skill_score * 2.5 + exec_score * 0.8 + 80)),
                 "composite":     composite,
             }
             meta = AGENT_META.get(name, {"type": "agent", "rank": i + 1})
