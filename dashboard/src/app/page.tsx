@@ -605,7 +605,7 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
 
 // ─── Trade History Graph Feed ─────────────────────────────────────────────────
 
-type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string; txLink?: string };
+type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string; txLink?: string; txHash?: string };
 
 function actionColor(action: string): { color: string; icon: string; pulse?: boolean } {
   const map: Record<string, { color: string; icon: string; pulse?: boolean }> = {
@@ -643,14 +643,14 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
         if (r.ok) {
           const data = await r.json();
           if (data.feed && data.feed.length > 0) {
-            const rows: FeedRow[] = data.feed.map((item: { ts: string; agent: string; action: string; confidence: number; reasoning: string; okb_price: number; outcome: string; tx_link?: string }) => {
+            const rows: FeedRow[] = data.feed.map((item: { ts: string; agent: string; action: string; confidence: number; reasoning: string; okb_price: number; outcome: string; tx_link?: string; tx_hash?: string }) => {
               const { color, icon } = actionColor(item.action);
               const ts = new Date(item.ts);
               const time = ts.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
               const detail = item.reasoning
                 ? `${item.reasoning} · ${item.confidence}%`
                 : `OKB $${data.okb_price?.toFixed(2)} · ${item.confidence}%`;
-              return { time, action: item.action, agent: item.agent, detail, color, icon, txLink: item.tx_link };
+              return { time, action: item.action, agent: item.agent, detail, color, icon, txLink: item.tx_link, txHash: item.tx_hash };
             });
             setFeed(rows);
           }
@@ -683,10 +683,120 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
   const sparkCols = 24;
   const filledSpark = [...Array(Math.max(0, sparkCols - sparkData.length)).fill(0), ...sparkData.slice(-sparkCols)];
 
+  const verifiedTxs = feed.filter(r => r.txLink);
+  const [txOpen, setTxOpen] = useState(true);
+
   return (
-    <div className="p-5 relative overflow-hidden" style={{ background: "#080604", border: "1px solid #2A1E0A" }}>
+    <div className="relative overflow-hidden" style={{ background: "#080604", border: "1px solid #2A1E0A" }}>
       <ScanLine />
-      <div className="relative z-10">
+
+      {/* ── ON-CHAIN PROOF DRAWER — always open by default ─────────────────── */}
+      <div style={{
+        borderBottom: txOpen ? "1px solid #1A3A1A" : "none",
+        background: "rgba(34,197,94,0.04)",
+      }}>
+        {/* Drawer header — click to toggle */}
+        <button
+          onClick={() => setTxOpen(o => !o)}
+          style={{
+            width: "100%", background: "none", border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "12px 20px",
+            borderBottom: "1px solid rgba(34,197,94,0.12)",
+          }}
+        >
+          <span style={{
+            width: 8, height: 8, borderRadius: "50%",
+            background: "#22c55e", boxShadow: "0 0 8px #22c55e, 0 0 20px #22c55e60",
+            display: "inline-block", flexShrink: 0,
+            animation: "pulse 1.2s infinite",
+          }} />
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace", fontSize: "0.65rem",
+            fontWeight: 800, letterSpacing: "0.25em", color: "#22c55e",
+            textShadow: "0 0 12px #22c55e80",
+          }}>
+            ⬡ ON-CHAIN PROOF — {verifiedTxs.length} VERIFIED TX
+          </span>
+          <span style={{ marginLeft: "auto", color: "#22c55e", fontSize: "0.7rem", opacity: 0.6 }}>
+            {txOpen ? "▲" : "▼"}
+          </span>
+        </button>
+
+        {txOpen && (
+          <div style={{ padding: "10px 20px 14px" }}>
+            {verifiedTxs.length === 0 ? (
+              <div style={{
+                fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
+                color: "#2A4A2A", padding: "8px 0",
+              }}>
+                Waiting for on-chain transactions… heartbeat runs every 30 min
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {verifiedTxs.map((row, i) => (
+                  <a
+                    key={i}
+                    href={row.txLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "8px 12px",
+                      background: "rgba(34,197,94,0.06)",
+                      border: "1px solid rgba(34,197,94,0.3)",
+                      boxShadow: "0 0 12px rgba(34,197,94,0.12), inset 0 0 20px rgba(34,197,94,0.03)",
+                      textDecoration: "none",
+                      transition: "all 0.2s",
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.boxShadow = "0 0 24px rgba(34,197,94,0.35), inset 0 0 20px rgba(34,197,94,0.06)";
+                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(34,197,94,0.7)";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.boxShadow = "0 0 12px rgba(34,197,94,0.12), inset 0 0 20px rgba(34,197,94,0.03)";
+                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(34,197,94,0.3)";
+                    }}
+                  >
+                    <span style={{ color: "#22c55e", fontSize: "0.85rem", flexShrink: 0 }}>⬡</span>
+                    <span style={{
+                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
+                      fontWeight: 700, color: "#DAA520", letterSpacing: "0.1em", flexShrink: 0,
+                    }}>
+                      {row.agent.replace("SILO-", "")}
+                    </span>
+                    <span style={{
+                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.6rem",
+                      color: row.color, letterSpacing: "0.15em", flexShrink: 0,
+                      background: `${row.color}18`, border: `1px solid ${row.color}40`,
+                      padding: "1px 6px",
+                    }}>
+                      {row.action}
+                    </span>
+                    <span style={{
+                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.58rem",
+                      color: "#3A5A3A", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {row.txHash ? `${row.txHash.slice(0, 22)}…` : ""}
+                    </span>
+                    <span style={{
+                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
+                      fontWeight: 800, color: "#22c55e",
+                      textShadow: "0 0 10px #22c55e",
+                      flexShrink: 0, letterSpacing: "0.1em",
+                    }}>
+                      VERIFY ↗
+                    </span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Feed header + rows ──────────────────────────────────────────────── */}
+      <div className="p-5 relative z-10">
         <div className="flex items-center justify-between mb-4">
           <div>
             <div className="text-xs tracking-[0.3em] mb-1" style={{ color: "#B8860B" }}>LIVE CIPHER FEED</div>
@@ -694,23 +804,17 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
               observe → reason → act → learn → evolve
             </div>
           </div>
-          {/* Sparkline */}
           <div className="flex items-end gap-px h-8">
             {filledSpark.map((v, i) => (
-              <div
-                key={i}
-                style={{
-                  width: 4,
-                  height: `${Math.max(4, (v / maxSpark) * 32)}px`,
-                  background: v > 0 ? "#DAA520" : "#1A1208",
-                  opacity: 0.4 + (i / sparkCols) * 0.6,
-                }}
-              />
+              <div key={i} style={{
+                width: 4, height: `${Math.max(4, (v / maxSpark) * 32)}px`,
+                background: v > 0 ? "#DAA520" : "#1A1208",
+                opacity: 0.4 + (i / sparkCols) * 0.6,
+              }} />
             ))}
           </div>
         </div>
 
-        {/* Feed rows */}
         <div className="space-y-1.5">
           {feed.map((row, i) => {
             const isQueued = row.action === "QUEUED";
@@ -725,10 +829,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
                 }}
               >
                 <span className="font-mono text-xs flex-shrink-0 w-12" style={{ color: "#3A2C16" }}>{row.time}</span>
-                <span
-                  className={`font-mono text-xs flex-shrink-0 ${isQueued ? "animate-pulse" : ""}`}
-                  style={{ color: row.color }}
-                >
+                <span className={`font-mono text-xs flex-shrink-0 ${isQueued ? "animate-pulse" : ""}`} style={{ color: row.color }}>
                   {row.icon}
                 </span>
                 <span
@@ -737,8 +838,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
                     background: isSwap ? `${row.color}25` : `${row.color}15`,
                     color: row.color,
                     border: `1px solid ${row.color}${isSwap ? "60" : "30"}`,
-                    minWidth: "7.5rem",
-                    textAlign: "center",
+                    minWidth: "7.5rem", textAlign: "center" as const,
                     fontWeight: isSwap || isQueued ? 800 : 400,
                   }}
                 >
@@ -760,11 +860,18 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
                     href={row.txLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-xs flex-shrink-0 px-1.5 py-0.5 transition-all"
-                    style={{ color: "#DAA520", border: "1px solid #DAA52040", background: "#1A1002" }}
-                    title="View on OKLink"
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: "0.6rem", fontWeight: 800, flexShrink: 0,
+                      padding: "2px 8px", letterSpacing: "0.1em",
+                      color: "#22c55e", border: "1px solid rgba(34,197,94,0.45)",
+                      background: "rgba(34,197,94,0.08)",
+                      textDecoration: "none",
+                      boxShadow: "0 0 8px rgba(34,197,94,0.2)",
+                      textShadow: "0 0 8px #22c55e80",
+                    }}
                   >
-                    TX ↗
+                    ⬡ TX ↗
                   </a>
                 )}
               </div>

@@ -26,9 +26,6 @@ const SEED_TOKENS: TickerToken[] = [
   { sym: "SOL",   price: 85.90,     change: +3.4               },
   { sym: "USDT",  price: 1.0000,    change:  0.0               },
   { sym: "USDC",  price: 0.9999,    change:  0.01              },
-  { sym: "INTNT", price: 0.3420,    change: +302.4,  highlight: true  },
-  { sym: "CORTX", price: 0.000095,  change:+1087.5,  highlight: true  },
-  { sym: "ZKPRF", price: 0.0560,    change: +22.4               },
 ];
 
 function fmtPrice(p: number): string {
