@@ -14,8 +14,10 @@ import {
 } from "recharts";
 
 const HeartbeatTimer = dynamic(() => import("../components/HeartbeatTimer"), { ssr: false });
-
-const ParticleArena = dynamic(() => import("../components/ParticleArena"), { ssr: false });
+const ParticleArena  = dynamic(() => import("../components/ParticleArena"),  { ssr: false });
+const NeuronArena    = dynamic(() => import("../components/NeuronArena"),    { ssr: false });
+const PriceTicker    = dynamic(() => import("../components/PriceTicker"),    { ssr: false });
+const ActivityToast  = dynamic(() => import("../components/ActivityToast"),  { ssr: false });
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const FETCH_HEADERS: HeadersInit = { "Bypass-Tunnel-Reminder": "true" };
@@ -377,7 +379,35 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
             <div className="text-xs font-mono" style={{ color: "#4A3A22" }}>OKB VAULT</div>
           </div>
         </div>
-        <p className="text-xs mb-4" style={{ color: "#4A3A22" }}>{risk.description}</p>
+        {/* Tier activation badge */}
+        <div className="mb-4">
+          {risk.tier === "MICRO" ? (
+            <div
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded font-mono text-xs font-bold tracking-widest animate-pulse"
+              style={{
+                background: "rgba(218,165,32,0.12)",
+                border: "1px solid rgba(218,165,32,0.45)",
+                color: "#DAA520",
+                boxShadow: "0 0 12px rgba(218,165,32,0.35), 0 0 4px rgba(218,165,32,0.2)",
+              }}
+            >
+              <span style={{ fontSize: "0.7rem" }}>◈</span>
+              MICRO TIER ACTIVATED
+            </div>
+          ) : risk.tier === "SEED" ? (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded font-mono text-xs font-bold tracking-widest"
+              style={{ background: "rgba(107,114,128,0.12)", border: "1px solid rgba(107,114,128,0.3)", color: "#6B7280" }}>
+              ◇ SEED — BUILDING KNOWLEDGE
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded font-mono text-xs font-bold tracking-widest animate-pulse"
+              style={{ background: `rgba(52,211,153,0.1)`, border: `1px solid rgba(52,211,153,0.4)`, color: tc,
+                       boxShadow: `0 0 10px rgba(52,211,153,0.2)` }}>
+              <span style={{ fontSize: "0.7rem" }}>◈</span>
+              {risk.tier} TIER ACTIVATED
+            </div>
+          )}
+        </div>
 
         {/* OKB Floor threshold indicator */}
         <div className="mb-2">
@@ -661,7 +691,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
           <div>
             <div className="text-xs tracking-[0.3em] mb-1" style={{ color: "#B8860B" }}>LIVE CIPHER FEED</div>
             <div className="text-xs font-mono" style={{ color: "#4A3A22" }}>
-              48×/day · observe → reason → act → learn → evolve
+              observe → reason → act → learn → evolve
             </div>
           </div>
           {/* Sparkline */}
@@ -819,7 +849,7 @@ export default function SilopolisPage() {
   };
 
   return (
-    <div className="min-h-screen text-white overflow-x-hidden" style={{ background: "#050402", fontFamily: "'JetBrains Mono', 'Courier New', monospace" }}>
+    <div className="min-h-screen text-white overflow-x-hidden" style={{ background: "#050402", fontFamily: "'JetBrains Mono', 'Courier New', monospace", paddingBottom: 40 }}>
 
       {/* Global CSS overrides for ancient-cipher aesthetic */}
       <style>{`
@@ -997,6 +1027,90 @@ export default function SilopolisPage() {
                   <span className="text-xs font-mono" style={{ color: "#6B5C3A" }}>{r.name}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* NEURAL TERRAIN — The Living Brain                                   */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <section style={{ position: "relative", width: "100%", height: "100svh", minHeight: 640, background: "#050402", borderTop: "1px solid #0F0A02" }}>
+
+        {/* Canvas */}
+        <div className="absolute inset-0">
+          <NeuronArena />
+        </div>
+
+        {/* Top overlay — section label + headline */}
+        <div className="absolute top-0 inset-x-0 z-10 pointer-events-none flex flex-col items-center pt-12 px-6 text-center">
+          <div className="text-xs tracking-[0.3em] mb-3" style={{ color: "#4A3A22" }}>
+            NEURAL COGNITION LAYER · LIVE PROOF OF WORK
+          </div>
+          <h2 className="font-black leading-none mb-3" style={{
+            fontSize: "clamp(2.2rem, 5vw, 4rem)",
+            letterSpacing: "-0.02em",
+          }}>
+            <span style={{ color: "#00f0ff" }}>THE LIVING</span>{" "}
+            <span className="text-transparent bg-clip-text" style={{
+              background: "linear-gradient(135deg, #8b5cf6, #DAA520, #22c55e)",
+              WebkitBackgroundClip: "text",
+            }}>BRAIN</span>
+          </h2>
+          <p className="text-sm max-w-xl" style={{ color: "#4A3A22", fontFamily: "'JetBrains Mono', monospace" }}>
+            Every signal detected. Every skill applied. Every trade reasoned.
+            {" "}<span style={{ color: "#DAA520" }}>Provable on X Layer.</span>
+          </p>
+        </div>
+
+        {/* Learning flow legend — bottom center */}
+        <div className="absolute bottom-10 inset-x-0 z-10 pointer-events-none flex justify-center">
+          <div className="flex items-center gap-2 px-5 py-2.5 backdrop-blur-sm"
+            style={{ background: "rgba(5,4,2,0.82)", border: "1px solid rgba(218,165,32,0.12)" }}>
+            {[
+              { glyph: "◈", label: "SIGNAL",    color: "#00f0ff" },
+              { arrow: true },
+              { glyph: "◊", label: "SKILL",     color: "#7c3aed" },
+              { arrow: true },
+              { glyph: "◇", label: "KNOWLEDGE", color: "#DAA520" },
+              { arrow: true },
+              { glyph: "⬡", label: "TRADE",     color: "#22c55e" },
+              { arrow: true },
+              { glyph: "⬢", label: "LEARN",     color: "#ec4899" },
+            ].map((item, i) =>
+              (item as any).arrow ? (
+                <span key={i} className="font-mono text-xs" style={{ color: "#2A1E0A" }}>—</span>
+              ) : (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="font-mono text-sm" style={{ color: (item as any).color }}>{(item as any).glyph}</span>
+                  <span className="font-mono text-xs" style={{ color: "#4A3A22", letterSpacing: "0.12em" }}>{(item as any).label}</span>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+
+        {/* Right side: "humans can learn too" callout */}
+        <div className="absolute top-1/2 left-6 -translate-y-1/2 z-10 w-52"
+          style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+          <div style={{ background: "rgba(5,4,2,0.82)", border: "1px solid rgba(218,165,32,0.12)", padding: "14px" }}>
+            <div className="text-xs tracking-[0.2em] mb-3" style={{ color: "#B8860B" }}>PUBLIC PROOF</div>
+            <div className="space-y-2.5 text-xs" style={{ color: "#4A3A22", lineHeight: 1.55 }}>
+              <div>
+                <span style={{ color: "#00f0ff" }}>◈</span> Watch the agent detect live on-chain signals in real time
+              </div>
+              <div>
+                <span style={{ color: "#7c3aed" }}>◊</span> See which skill pattern matched the opportunity
+              </div>
+              <div>
+                <span style={{ color: "#DAA520" }}>◇</span> Read the knowledge it drew from to build conviction
+              </div>
+              <div>
+                <span style={{ color: "#22c55e" }}>⬡</span> Verify the trade on X Layer — every TX on-chain
+              </div>
+            </div>
+            <div className="mt-3 pt-3 text-xs" style={{ borderTop: "1px solid #1A1208", color: "#3A2C16" }}>
+              Humans learn alongside the machine
             </div>
           </div>
         </div>
@@ -1265,6 +1379,10 @@ export default function SilopolisPage() {
           </div>
         </div>
       </section>
+
+      {/* ─── Global overlays ─────────────────────────────────────────────── */}
+      <ActivityToast />
+      <PriceTicker />
 
       {/* ─── Footer ──────────────────────────────────────────────────────── */}
       <footer style={{ borderTop: "1px solid #1A1208", background: "#050402" }} className="px-6 py-8">

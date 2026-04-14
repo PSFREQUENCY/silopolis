@@ -72,6 +72,21 @@ body {
   50%       { opacity: 1; }
 }
 
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px #22c55e; }
+  50%       { opacity: 0.4; box-shadow: 0 0 2px #22c55e; }
+}
+
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes toast-drain {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
 .classified-in {
   animation: flicker 0.5s ease-out, cipher-in 0.9s ease-out;
 }
