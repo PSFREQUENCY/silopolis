@@ -194,11 +194,29 @@ class RiskGovernor:
         return get_risk_tier(self.state.okb_balance)
 
     # Hard floor — never trade OKB below this threshold
-    OKB_FLOOR = float(os.environ.get("SILOPOLIS_OKB_FLOOR", "0.00222"))
+    OKB_FLOOR  = float(os.environ.get("SILOPOLIS_OKB_FLOOR",   "0.00222"))
+    # Buffer zone — if balance < BUFFER, buybacks bypass daily limit
+    OKB_BUFFER = float(os.environ.get("SILOPOLIS_OKB_BUFFER",  "0.00666"))  # 3× floor
+
+    @property
+    def needs_buyback(self) -> bool:
+        """True when OKB balance is below the buffer threshold — buyback is top priority."""
+        return self.state.okb_balance < self.OKB_BUFFER
+
+    @property
+    def can_buyback(self) -> bool:
+        """OKB buyback is always allowed when below buffer, even if daily budget is exhausted.
+        Buying OKB back is a capital preservation action, not a speculative trade."""
+        self.state.reset_daily()
+        if self.state.is_paused:
+            return False
+        if self.state.okb_balance <= self.OKB_FLOOR:
+            return False  # absolutely nothing left to work with
+        return self.needs_buyback  # True if below buffer
 
     @property
     def can_trade(self) -> bool:
-        """True if conditions allow a trade right now."""
+        """True if conditions allow a speculative trade right now."""
         self.state.reset_daily()
         t = self.tier
         if not t.allow_trading:
@@ -225,6 +243,12 @@ class RiskGovernor:
         base = get_max_trade_size(self.state.okb_balance, t)
         remaining_daily = t.max_daily_okb - self.state.daily_spent_okb
         return round(min(base, remaining_daily, spendable * 0.1), 6)  # max 10% of spendable
+
+    def get_buyback_size(self) -> float:
+        """Return how much OKB to buy back. Targets restoring balance to OKB_BUFFER."""
+        deficit = max(0.0, self.OKB_BUFFER - self.state.okb_balance)
+        # Buy enough to close 50% of the deficit in one shot (conservative)
+        return round(min(deficit * 0.5, self.OKB_FLOOR), 6)
 
     def check_confidence(self, confidence: int) -> bool:
         """Return True if confidence meets the tier's minimum.
@@ -283,6 +307,8 @@ class RiskGovernor:
             "consecutive_losses": self.state.consecutive_losses,
             "daily_budget_remaining_okb": round(max(0, t.max_daily_okb - self.state.daily_spent_okb), 6),
             "can_trade":         self.can_trade,
+            "can_buyback":       self.can_buyback,
+            "needs_buyback":     self.needs_buyback,
             "is_paused":         self.state.is_paused,
             "allow_lp":          t.allow_lp,
         }

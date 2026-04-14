@@ -318,8 +318,19 @@ def reason(agent_def: dict, observation: dict) -> dict:
     t = _risk.tier
     trade_size = _risk.get_trade_size()
     can_trade = _risk.can_trade
+    needs_buyback = _risk.needs_buyback
+    can_buyback = _risk.can_buyback
+    buyback_size = _risk.get_buyback_size()
     daily_remaining = round(max(0, t.max_daily_okb - _risk.state.daily_spent_okb), 6)
-    if can_trade:
+
+    if needs_buyback and can_buyback:
+        window_status = "BUYBACK MODE — OKB below buffer, acquiring OKB is top priority"
+        window_instruction = (
+            f"IMMEDIATELY execute swap to buy {buyback_size:.6f} OKB. "
+            f"Use action=swap, from_token=USDT, to_token=OKB, amount_usd={buyback_size * observation['market'].get('OKB', {}).get('price_usd', 85):.4f}. "
+            "This bypasses daily budget — capital preservation overrides all other goals."
+        )
+    elif can_trade:
         window_status = "OPEN — execute trades now"
         window_instruction = "EXECUTE your trade immediately."
     elif _risk.state.is_paused:
@@ -328,12 +339,22 @@ def reason(agent_def: dict, observation: dict) -> dict:
     else:
         window_status = f"RESTING — {daily_remaining:.6f} OKB budget remaining for next window"
         window_instruction = "QUEUE your intended trade with queue_swap, or run your observation role."
+
+    buyback_alert = ""
+    if needs_buyback:
+        buyback_alert = (
+            f"\n⚠️  OKB BUYBACK ALERT: Balance {_risk.state.okb_balance:.6f} OKB is below buffer "
+            f"({_risk.OKB_BUFFER:.5f} OKB). "
+            "PRIORITY #1: acquire OKB. No speculative trades until buffer is restored."
+        )
+
     vault_ctx = (
         f"Vault tier: {t.name} | Balance: {_risk.state.okb_balance:.6f} OKB | "
         f"Max trade: {trade_size:.6f} OKB | Window: {window_status} | "
         f"Daily spent: {_risk.state.daily_spent_okb:.6f}/{t.max_daily_okb:.6f} OKB | "
         f"Win rate: {_risk.state.win_rate*100:.1f}% ({_risk.state.total_trades} trades) | "
         f"ACTION: {window_instruction}"
+        f"{buyback_alert}"
     )
 
     okb_price = observation['market'].get('OKB', {}).get('price_usd', 0)
@@ -496,29 +517,35 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
     logger.info("[act] %s → %s (confidence=%d, tier=%s)", name, action, confidence, _risk.tier.name)
 
     if action == "swap":
-        # Risk Governor gate — checks balance, daily budget, pause state
-        if not _risk.can_trade:
-            status = _risk.status_dict()
-            return {"outcome": "risk_hold", "reason": status["description"],
-                    "tier": status["tier"], "tx_hash": None}
-
-        from_tok  = params.get("from_token", "OKB")
-        to_tok    = params.get("to_token", "USDT")
+        from_tok = params.get("from_token", "OKB")
+        to_tok   = params.get("to_token", "USDT")
 
         # ── OKB ACCUMULATION GUARD ────────────────────────────────────────────
-        # Primary goal: grow OKB holdings. Never sell OKB unless balance is
-        # safely above floor + buffer. Force buyback direction when low.
-        floor = _risk.OKB_FLOOR
-        bal   = _risk.state.okb_balance
-        buyback_threshold = floor * 3.0   # below 3x floor → buy OKB, don't sell
-        if from_tok.upper() == "OKB" and bal < buyback_threshold:
-            # Redirect: buy OKB with USDT instead of selling OKB
-            logger.info("[act] %s — OKB low (%.6f < %.6f buffer) → redirecting to OKB buyback",
-                        name, bal, buyback_threshold)
+        # Detect if this is a buyback (acquiring OKB with stable)
+        is_buyback = to_tok.upper() == "OKB" and from_tok.upper() in ("USDT", "USDC", "ETH")
+
+        # Force redirect: if OKB is below buffer and agent is trying to sell OKB,
+        # flip the direction to a buyback instead.
+        if from_tok.upper() == "OKB" and _risk.needs_buyback:
+            logger.info("[act] %s — OKB low (%.6f < buffer %.6f) → redirecting to OKB buyback",
+                        name, _risk.state.okb_balance, _risk.OKB_BUFFER)
             from_tok, to_tok = "USDT", "OKB"
-            # Use a small USDT amount (proxy for what we'd spend)
-            safe_amount = "0.001"   # $0.001 USDT buyback
+            is_buyback = True
+
+        # Risk gate: buybacks bypass daily budget; speculative trades require can_trade
+        if is_buyback:
+            if not _risk.can_buyback:
+                return {"outcome": "risk_hold", "reason": "buyback blocked (floor or pause)",
+                        "tier": _risk.tier.name, "tx_hash": None}
+            logger.info("[act] %s — OKB BUYBACK authorized (balance=%.6f, buffer=%.6f)",
+                        name, _risk.state.okb_balance, _risk.OKB_BUFFER)
+            safe_amount = str(_risk.get_buyback_size() or 0.001)
         else:
+            # Normal speculative trade — check full can_trade gate
+            if not _risk.can_trade:
+                status = _risk.status_dict()
+                return {"outcome": "risk_hold", "reason": status["description"],
+                        "tier": status["tier"], "tx_hash": None}
             safe_amount = str(_risk.get_trade_size())
 
         if safe_amount == "0.0" or float(safe_amount) == 0:

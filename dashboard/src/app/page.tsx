@@ -653,7 +653,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     const loadFeed = async () => {
       try {
-        const r = await fetch(`${apiBase}/api/feed?limit=18`, { headers: FETCH_HEADERS });
+        const r = await fetch(`${apiBase}/api/feed?limit=60`, { headers: FETCH_HEADERS });
         if (r.ok) {
           const data = await r.json();
           if (data.feed && data.feed.length > 0) {
@@ -699,6 +699,8 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
   const filledSpark = [...Array(Math.max(0, sparkCols - sparkData.length)).fill(0), ...sparkData.slice(-sparkCols)];
 
   const verifiedTxs = feed.filter(r => r.txLink);
+  // All swap-type activity: verified on-chain + simulated (shown differently)
+  const swapRows = feed.filter(r => r.action === "SWAP" || r.action === "QUEUED" || r.txLink);
   const [txOpen, setTxOpen] = useState(true);
 
   return (
@@ -731,7 +733,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
             fontWeight: 800, letterSpacing: "0.25em", color: "#22c55e",
             textShadow: "0 0 12px #22c55e80",
           }}>
-            ⬡ ON-CHAIN PROOF — {verifiedTxs.length} VERIFIED TX
+            ⬡ ON-CHAIN PROOF — {verifiedTxs.length > 0 ? `${verifiedTxs.length} VERIFIED` : `${swapRows.length} SWAP ACTIONS`}
           </span>
           <span style={{ marginLeft: "auto", color: "#22c55e", fontSize: "0.7rem", opacity: 0.6 }}>
             {txOpen ? "▲" : "▼"}
@@ -740,7 +742,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
 
         {txOpen && (
           <div style={{ padding: "10px 20px 14px" }}>
-            {verifiedTxs.length === 0 ? (
+            {swapRows.length === 0 ? (
               <div className="animate-pulse" style={{
                 fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
                 color: "#22c55e", padding: "8px 0", opacity: 0.6,
@@ -749,62 +751,61 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
                 ◈ INCOMING DATA · TX LOADING...
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {verifiedTxs.map((row, i) => (
-                  <a
-                    key={i}
-                    href={row.txLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "flex", alignItems: "center", gap: 10,
-                      padding: "8px 12px",
-                      background: "rgba(34,197,94,0.06)",
-                      border: "1px solid rgba(34,197,94,0.3)",
-                      boxShadow: "0 0 12px rgba(34,197,94,0.12), inset 0 0 20px rgba(34,197,94,0.03)",
-                      textDecoration: "none",
-                      transition: "all 0.2s",
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLElement).style.boxShadow = "0 0 24px rgba(34,197,94,0.35), inset 0 0 20px rgba(34,197,94,0.06)";
-                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(34,197,94,0.7)";
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLElement).style.boxShadow = "0 0 12px rgba(34,197,94,0.12), inset 0 0 20px rgba(34,197,94,0.03)";
-                      (e.currentTarget as HTMLElement).style.borderColor = "rgba(34,197,94,0.3)";
-                    }}
-                  >
-                    <span style={{ color: "#22c55e", fontSize: "0.85rem", flexShrink: 0 }}>⬡</span>
-                    <span style={{
-                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
-                      fontWeight: 700, color: "#DAA520", letterSpacing: "0.1em", flexShrink: 0,
-                    }}>
-                      {row.agent.replace("SILO-", "")}
-                    </span>
-                    <span style={{
-                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.6rem",
-                      color: row.color, letterSpacing: "0.15em", flexShrink: 0,
-                      background: `${row.color}18`, border: `1px solid ${row.color}40`,
-                      padding: "1px 6px",
-                    }}>
-                      {row.action}
-                    </span>
-                    <span style={{
-                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.58rem",
-                      color: "#3A5A3A", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                    }}>
-                      {row.txHash ? `${row.txHash.slice(0, 22)}…` : ""}
-                    </span>
-                    <span style={{
-                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
-                      fontWeight: 800, color: "#22c55e",
-                      textShadow: "0 0 10px #22c55e",
-                      flexShrink: 0, letterSpacing: "0.1em",
-                    }}>
-                      VERIFY ↗
-                    </span>
-                  </a>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: "14rem", overflowY: "auto", scrollbarWidth: "thin", scrollbarColor: "#1A3A1A #080604" }}>
+                {swapRows.map((row, i) => {
+                  const verified = !!row.txLink;
+                  const isQueued = row.action === "QUEUED";
+                  const WrapEl = verified ? "a" : "div";
+                  const wrapProps = verified ? { href: row.txLink, target: "_blank", rel: "noopener noreferrer" } : {};
+                  return (
+                    <WrapEl
+                      key={i}
+                      {...(wrapProps as any)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "7px 12px",
+                        background: verified ? "rgba(34,197,94,0.06)" : isQueued ? "rgba(249,115,22,0.04)" : "rgba(218,165,32,0.04)",
+                        border: `1px solid ${verified ? "rgba(34,197,94,0.3)" : isQueued ? "rgba(249,115,22,0.2)" : "rgba(218,165,32,0.15)"}`,
+                        textDecoration: "none",
+                        cursor: verified ? "pointer" : "default",
+                      }}
+                    >
+                      <span style={{ fontSize: "0.78rem", flexShrink: 0, color: verified ? "#22c55e" : isQueued ? "#F97316" : "#DAA520" }}>
+                        {verified ? "⬡" : isQueued ? "⏳" : "◈"}
+                      </span>
+                      <span style={{
+                        fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
+                        fontWeight: 700, color: "#DAA520", letterSpacing: "0.1em", flexShrink: 0,
+                      }}>
+                        {row.agent.replace("SILO-", "")}
+                      </span>
+                      <span style={{
+                        fontFamily: "'JetBrains Mono', monospace", fontSize: "0.58rem",
+                        color: row.color, letterSpacing: "0.12em", flexShrink: 0,
+                        background: `${row.color}15`, border: `1px solid ${row.color}35`,
+                        padding: "1px 5px",
+                      }}>
+                        {row.action}
+                      </span>
+                      <span style={{
+                        fontFamily: "'JetBrains Mono', monospace", fontSize: "0.56rem",
+                        color: verified ? "#3A5A3A" : "#3A3020",
+                        flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        {row.txHash ? `${row.txHash.slice(0, 18)}…` : row.detail.slice(0, 40)}
+                      </span>
+                      <span style={{
+                        fontFamily: "'JetBrains Mono', monospace", fontSize: "0.58rem",
+                        fontWeight: 800, flexShrink: 0, letterSpacing: "0.08em",
+                        color: verified ? "#22c55e" : isQueued ? "#F97316" : "#B8860B",
+                        textShadow: verified ? "0 0 8px #22c55e" : "none",
+                        opacity: verified ? 1 : 0.7,
+                      }}>
+                        {verified ? "⬡ VERIFY ↗" : isQueued ? "NEXT HB →" : "SIMULATED"}
+                      </span>
+                    </WrapEl>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -831,7 +832,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
           </div>
         </div>
 
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" style={{ maxHeight: "32rem", overflowY: "auto", scrollbarWidth: "thin", scrollbarColor: "#2A1E0A #080604" }}>
           {feed.map((row, i) => {
             const isQueued = row.action === "QUEUED";
             const isSwap   = row.action === "SWAP";
@@ -970,15 +971,12 @@ export default function SilopolisPage() {
       if (!r.ok) return;
       const data = await r.json();
       const items: { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string }[] = data.feed ?? [];
-      // Reverse so oldest is index 0, newest is last
-      const txItems: TxHistoryItem[] = items
-        .filter(f => f.tx_hash && f.tx_hash !== "DRY_RUN" && f.tx_hash !== "")
-        .reverse()
-        .map(f => ({
+      // Include ALL feed rows in mesh — verified tx get OKLink on click, others still show in mesh
+      const txItems: TxHistoryItem[] = [...items].reverse().map(f => ({
           ts: f.ts,
           agent: f.agent,
           action: f.action,
-          tx_hash: f.tx_hash!,
+          tx_hash: (f.tx_hash && f.tx_hash !== "DRY_RUN") ? f.tx_hash : undefined,
           color: AGENT_COLORS[f.agent] ?? "#DAA520",
           is_x402: f.agent === "SILO-SKILL-3" || (f.reasoning ?? "").toLowerCase().includes("x402"),
         }));
