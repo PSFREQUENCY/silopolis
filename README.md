@@ -20,9 +20,19 @@
 
 ## What We Built
 
-**SILOPOLIS** is a fully autonomous multi-agent economy deployed on X Layer. Every 2 hours, a swarm of 5 specialized AI agents wakes up, reads the market, reasons with Gemini 2.5, executes on-chain trades via the OnchainOS Agentic Wallet, learns from outcomes, and stores everything in a persistent knowledge graph — forever growing, forever improving.
+**SILOPOLIS** is a fully autonomous multi-agent economy deployed on X Layer. Every 2 hours, a swarm of 9 specialized AI agents wakes up, reads the market, reasons with Gemini 2.5, executes on-chain trades via the OnchainOS Agentic Wallet, learns from outcomes, and stores everything in a persistent knowledge graph — forever growing, forever improving.
 
 The frontend is an **ancient cyberspy relic hunter** game UI: agents earn skill relics, build 8-axis mastery scores recorded on-chain in `ReputationEngine.sol`, and compete for vault tier ascension from RELIC → INITIATE → SCOUT → EXCAVATOR → CIPHER → ORACLE.
+
+### Living Brain Visualization
+
+The centerpiece is **THE LIVING BRAIN** — a full-viewport canvas where:
+
+- A **sheer entangled mesh network** of 260 nodes sits behind the main agent neurons. Every live on-chain transaction is mapped as a holographic neon particle node in the mesh, colored by agent identity.
+- **Mouse / finger hover** pushes the mesh like flowing water (spring-physics repulsion). The mesh springs back to rest when you move away.
+- **Hover any TX node** in the mesh to reveal its agent name, action type, and transaction hash. x402 micropayment transactions glow with a distinctive **purple ring**.
+- **Click a TX node** to fire the agent neurons — the full signal→skill→knowledge→trade path explodes across the brain, then opens the OKLink transaction on X Layer.
+- A **timeline slider** at the bottom of the brain lets any human or agent scrub from genesis TX to the most recent — watching the mesh grow, decision evolution, and reputation accumulation in real time.
 
 **It has been running autonomously since deployment. The vault is live. The agents are learning.**
 
@@ -150,14 +160,19 @@ This creates a live **agent micropayment economy** — agents earn OKB from trad
 
 ```
 Frontend    Next.js 14 · Tailwind CSS · Recharts · Canvas 2D particle engine
+            - Mesh network: 260-node spring physics, water-flow mouse interaction
+            - TX mesh nodes: holographic neon particles per live on-chain transaction
+            - Timeline slider: scrub from genesis TX to present, see swarm evolution
+            - x402 highlights: purple ring + badge on Cipher Token micropayments
+            - Cipher Loop: clickable steps navigate to relevant sections/DEX
 Backend     FastAPI · Python 3.12 · Uvicorn
 AI          Gemini 2.5 Pro + Flash (SwarmFi cognition + threat gate)
 MCP         OKX OnchainOS MCP server (native tool calling)
 On-chain    OnchainOS TEE Agentic Wallet · X Layer (Chain 196) · Solidity 0.8
 DEX         PotatoSwap · CurveNG · Uniswap V4 Universal Router
-Payments    x402 micropayment protocol
+Payments    x402 micropayment protocol (HTTP 402 agent-to-agent micropayments)
 Memory      SQLite knowledge graph (persistent across restarts)
-Scheduler   macOS LaunchAgent (12x/day) + Docker cron
+Scheduler   macOS LaunchAgent (12x/day, every 2h) + self-healing KeepAlive daemon
 Deploy      Vercel (frontend + API) · Foundry (contracts)
 ```
 
@@ -195,7 +210,7 @@ uvicorn api.main:app --reload
 ```
 silopolis/
 ├── core/
-│   ├── heartbeat.py         # 5-agent autonomous cycle (observe→reason→act→learn)
+│   ├── heartbeat.py         # 9-agent autonomous cycle (observe→reason→act→learn)
 │   ├── cognition.py         # SwarmFi Gemini reasoning + threat gate
 │   ├── risk.py              # Vault tier risk governor + profit capture
 │   ├── memory.py            # SQLite persistent knowledge graph
@@ -209,12 +224,22 @@ silopolis/
 ├── api/
 │   └── main.py              # FastAPI: /risk, /knowledge, /swarm/cycle, /heartbeat/status
 ├── dashboard/
-│   └── src/app/             # Next.js ancient cyberspy relic hunter UI
+│   ├── src/app/page.tsx          # Main UI — brain, timeline, cipher loop, live feed
+│   └── src/components/
+│       ├── NeuronArena.tsx        # Living Brain: mesh network + TX nodes + physics
+│       ├── HeartbeatTimer.tsx     # Countdown to next cycle
+│       ├── ParticleArena.tsx      # Hero background particle canvas
+│       ├── PriceTicker.tsx        # Live OKB price ticker
+│       └── ActivityToast.tsx      # Agent action notifications
 ├── scripts/
 │   ├── deploy.py            # Foundry contract deployer
-│   └── start_heartbeat.sh   # Local daemon launcher
+│   ├── run_heartbeat.sh     # Heartbeat daemon launcher
+│   └── auto_deploy.sh       # Auto-deploy script
 └── launchd/
-    └── com.silopolis.heartbeat.plist  # macOS 12x/day scheduler
+    ├── com.silopolis.heartbeat.plist  # Self-healing heartbeat (KeepAlive + --forever)
+    ├── com.silopolis.api.plist        # FastAPI server daemon
+    ├── com.silopolis.tunnel.plist     # Localtunnel for Vercel→local bridge
+    └── com.silopolis.deploy.plist     # Auto-deploy trigger
 ```
 
 ---
