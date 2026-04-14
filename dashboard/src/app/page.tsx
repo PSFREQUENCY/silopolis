@@ -949,19 +949,29 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
                     href={row.txLink || "https://www.oklink.com/x-layer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/aa"}
                     target="_blank"
                     rel="noopener noreferrer"
+                    className="tx-link-btn"
                     style={{
                       fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: "0.6rem", fontWeight: 800, flexShrink: 0,
-                      padding: "2px 8px", letterSpacing: "0.1em",
-                      color: row.txLink ? "#22c55e" : "#DAA520",
-                      border: `1px solid ${row.txLink ? "rgba(34,197,94,0.45)" : "rgba(218,165,32,0.35)"}`,
-                      background: row.txLink ? "rgba(34,197,94,0.08)" : "rgba(218,165,32,0.06)",
+                      fontSize: "0.62rem", fontWeight: 900, flexShrink: 0,
+                      padding: "3px 10px", letterSpacing: "0.15em",
+                      color: row.txLink ? "#22c55e" : "#FFD700",
+                      border: `1px solid ${row.txLink ? "#22c55e" : "#FFD700"}`,
+                      background: row.txLink
+                        ? "rgba(34,197,94,0.12)"
+                        : "rgba(255,215,0,0.08)",
                       textDecoration: "none",
-                      boxShadow: row.txLink ? "0 0 8px rgba(34,197,94,0.2)" : "none",
-                      textShadow: row.txLink ? "0 0 8px #22c55e80" : "none",
+                      boxShadow: row.txLink
+                        ? "0 0 10px rgba(34,197,94,0.55), 0 0 22px rgba(34,197,94,0.25), inset 0 0 8px rgba(34,197,94,0.08)"
+                        : "0 0 10px rgba(255,215,0,0.45), 0 0 22px rgba(255,215,0,0.18), inset 0 0 8px rgba(255,215,0,0.06)",
+                      textShadow: row.txLink
+                        ? "0 0 10px #22c55e, 0 0 20px #22c55e80"
+                        : "0 0 10px #FFD700, 0 0 20px #FFD70080",
+                      animation: row.txLink
+                        ? "txGlow 1.8s ease-in-out infinite alternate"
+                        : "txGlowGold 1.8s ease-in-out infinite alternate",
                     }}
                   >
-                    {row.txLink ? "⬡ TX ↗" : "⬡ WALLET ↗"}
+                    {row.txLink ? "⬡ TX ↗" : "⬡ ON-CHAIN ↗"}
                   </a>
                 )}
               </div>
@@ -1106,6 +1116,16 @@ export default function SilopolisPage() {
         @keyframes scandown {
           from { transform: translateY(-100%) } to { transform: translateY(100vh) }
         }
+        @keyframes txGlow {
+          from { box-shadow: 0 0 8px rgba(34,197,94,0.5), 0 0 18px rgba(34,197,94,0.2), inset 0 0 6px rgba(34,197,94,0.06); }
+          to   { box-shadow: 0 0 14px rgba(34,197,94,0.9), 0 0 32px rgba(34,197,94,0.45), inset 0 0 12px rgba(34,197,94,0.12); }
+        }
+        @keyframes txGlowGold {
+          from { box-shadow: 0 0 8px rgba(255,215,0,0.4), 0 0 18px rgba(255,215,0,0.15), inset 0 0 6px rgba(255,215,0,0.05); }
+          to   { box-shadow: 0 0 14px rgba(255,215,0,0.8), 0 0 32px rgba(255,215,0,0.35), inset 0 0 12px rgba(255,215,0,0.10); }
+        }
+        .tx-link-btn { transition: transform 0.1s; cursor: pointer; }
+        .tx-link-btn:hover { transform: scale(1.06); }
         .classified-in { animation: flicker 0.4s ease-out; }
         .scan-beam {
           position: fixed; left:0; right:0; height:2px; z-index:999; pointer-events:none;
