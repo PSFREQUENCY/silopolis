@@ -296,8 +296,9 @@ function AgentCard({ agent, selected, onClick }: { agent: Agent; selected: boole
 interface RiskStatus {
   tier: string; description: string; okb_balance: number;
   max_trade_okb: number; daily_budget_okb: number; daily_spent_okb: number;
-  total_trades: number; win_rate_pct: number; total_profit_okb: number;
-  consecutive_losses: number; can_trade: boolean; is_paused: boolean;
+  total_trades: number; winning_trades: number; win_rate_pct: number; total_profit_okb: number;
+  consecutive_losses: number; daily_budget_remaining_okb: number; can_trade: boolean;
+  is_paused: boolean; allow_lp: boolean;
 }
 
 const TIER_COLORS: Record<string, string> = {
@@ -305,17 +306,31 @@ const TIER_COLORS: Record<string, string> = {
   MEDIUM: "#FBBF24", ACTIVE: "#DAA520",
 };
 
+const OKB_FLOOR = 0.00222;
+const OKB_BUFFER = OKB_FLOOR * 3; // 0.00666
+
 function RiskPanel({ apiBase }: { apiBase: string }) {
   const [risk, setRisk] = useState<RiskStatus | null>(null);
+  const [knowledgeCount, setKnowledgeCount] = useState(0);
+  const [cycleCount, setCycleCount] = useState(0);
+  const [totalActions, setTotalActions] = useState(0);
+
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await fetch(`${apiBase}/api/risk`, { headers: FETCH_HEADERS });
-        if (r.ok) setRisk(await r.json());
+        const opts = { headers: FETCH_HEADERS };
+        const [rr, kr, hr] = await Promise.all([
+          fetch(`${apiBase}/api/risk`, opts),
+          fetch(`${apiBase}/api/knowledge?limit=100`, opts),
+          fetch(`${apiBase}/api/heartbeat/status`, opts),
+        ]);
+        if (rr.ok) setRisk(await rr.json());
+        if (kr.ok) { const kd = await kr.json(); setKnowledgeCount((kd.knowledge ?? []).length); }
+        if (hr.ok) { const hd = await hr.json(); setCycleCount(hd.total_cycles ?? 0); setTotalActions(hd.last_heartbeat?.actions_taken ?? 0); }
       } catch {}
     };
     load();
-    const iv = setInterval(load, 60_000);
+    const iv = setInterval(load, 30_000);
     return () => clearInterval(iv);
   }, [apiBase]);
 
@@ -323,6 +338,23 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
   const tc = TIER_COLORS[risk.tier] ?? "#6B7280";
   const dailyPct = risk.daily_budget_okb > 0
     ? Math.min(100, (risk.daily_spent_okb / risk.daily_budget_okb) * 100) : 0;
+
+  // OKB floor health — how far above floor the balance is
+  const floorPct = Math.min(100, (risk.okb_balance / OKB_BUFFER) * 100);
+  const floorColor = risk.okb_balance < OKB_FLOOR ? "#F87171" : risk.okb_balance < OKB_BUFFER ? "#FBBF24" : "#34D399";
+
+  // Portfolio management feed bars (0–100 derived scores)
+  const logicScore   = Math.max(0, Math.min(100, 80 - risk.consecutive_losses * 25 + (risk.win_rate_pct > 50 ? 20 : 0)));
+  const knowledgeScore = Math.min(100, (knowledgeCount / 40) * 100);
+  const implScore    = risk.total_trades > 0 ? Math.min(100, ((risk.winning_trades ?? 0) / risk.total_trades) * 100 + 10) : 10;
+  const improvScore  = Math.min(100, risk.win_rate_pct + (cycleCount * 2));
+
+  // Multi-coin basket allocation targets (MICRO tier: max OKB accumulation)
+  const basket = [
+    { symbol: "OKB",  pct: 70, color: "#DAA520", desc: "Core accumulation target" },
+    { symbol: "USDT", pct: 22, color: "#34D399", desc: "Stable buyback reserve" },
+    { symbol: "USDC", pct: 8,  color: "#60A5FA", desc: "Arb buffer" },
+  ];
 
   return (
     <div className="p-5 relative overflow-hidden" style={{ background: "#080604", border: "1px solid #2A1E0A" }}>
@@ -335,6 +367,7 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
               <span className="text-lg font-black font-mono tracking-widest" style={{ color: tc }}>{risk.tier}</span>
               {risk.is_paused && <span className="text-xs font-mono animate-pulse" style={{ color: "#F87171" }}>PAUSED</span>}
               {risk.can_trade && !risk.is_paused && <span className="text-xs font-mono" style={{ color: "#34D399" }}>● LIVE</span>}
+              {!risk.can_trade && !risk.is_paused && <span className="text-xs font-mono" style={{ color: "#FBBF24" }}>● GUARD</span>}
             </div>
           </div>
           <div className="text-right">
@@ -345,8 +378,26 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
           </div>
         </div>
         <p className="text-xs mb-4" style={{ color: "#4A3A22" }}>{risk.description}</p>
+
+        {/* OKB Floor threshold indicator */}
+        <div className="mb-2">
+          <div className="flex justify-between text-xs font-mono mb-1">
+            <span style={{ color: floorColor }}>OKB FLOOR GUARD</span>
+            <span style={{ color: floorColor }}>
+              {risk.okb_balance.toFixed(6)} / {OKB_BUFFER.toFixed(6)} OKB
+              {risk.okb_balance < OKB_FLOOR ? " ⚠ BELOW FLOOR" : risk.okb_balance < OKB_BUFFER ? " ↑ BUYING" : " ✓ SAFE"}
+            </span>
+          </div>
+          <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ background: "#1A1208" }}>
+            <div className="h-full transition-all rounded-full" style={{ width: `${floorPct}%`, background: floorColor }} />
+          </div>
+          <div className="flex justify-between text-xs font-mono mt-0.5" style={{ color: "#2A1E0A" }}>
+            <span>FLOOR {OKB_FLOOR}</span><span>BUFFER {OKB_BUFFER.toFixed(5)}</span>
+          </div>
+        </div>
+
         {/* Daily budget progress */}
-        <div className="mb-3">
+        <div className="mb-4">
           <div className="flex justify-between text-xs font-mono mb-1" style={{ color: "#4A3A22" }}>
             <span>DAILY BUDGET</span>
             <span style={{ color: tc }}>{risk.daily_spent_okb.toFixed(6)} / {risk.daily_budget_okb.toFixed(6)} OKB</span>
@@ -355,10 +406,11 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
             <div className="h-full transition-all" style={{ width: `${dailyPct}%`, background: tc }} />
           </div>
         </div>
+
         {/* Stats grid */}
-        <div className="grid grid-cols-3 gap-3 text-center">
+        <div className="grid grid-cols-3 gap-3 text-center mb-4">
           {[
-            { label: "TRADES",   value: risk.total_trades.toString(),      color: "#9A8060" },
+            { label: "TRADES",   value: risk.total_trades.toString(),       color: "#9A8060" },
             { label: "WIN RATE", value: `${risk.win_rate_pct.toFixed(0)}%`, color: risk.win_rate_pct >= 50 ? "#34D399" : "#F87171" },
             { label: "PROFIT",   value: `+${risk.total_profit_okb.toFixed(6)}`, color: "#DAA520" },
           ].map(s => (
@@ -367,6 +419,44 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
               <div className="text-xs mt-0.5 font-mono" style={{ color: "#3A2C16" }}>{s.label}</div>
             </div>
           ))}
+        </div>
+
+        {/* ── Portfolio Management Bar ─────────────────────────────────────── */}
+        <div className="pt-3" style={{ borderTop: "1px solid #1A1208" }}>
+          <div className="text-xs tracking-[0.2em] mb-3" style={{ color: "#4A3A22" }}>PORTFOLIO MANAGEMENT</div>
+
+          {/* 4-feed bars */}
+          {[
+            { label: "LOGIC",        score: logicScore,     color: "#C084FC", detail: `${risk.consecutive_losses} consec. losses` },
+            { label: "KNOWLEDGE",    score: knowledgeScore, color: "#60A5FA", detail: `${knowledgeCount} entries acquired` },
+            { label: "IMPLEMENTATION", score: implScore,    color: "#34D399", detail: `${risk.winning_trades ?? 0}/${risk.total_trades} wins` },
+            { label: "IMPROVEMENT",  score: improvScore,    color: "#DAA520", detail: `${cycleCount} cycles complete` },
+          ].map(({ label, score, color, detail }) => (
+            <div key={label} className="mb-2">
+              <div className="flex justify-between text-xs font-mono mb-0.5">
+                <span style={{ color: "#4A3A22" }}>{label}</span>
+                <span style={{ color }}>{Math.round(score)}% · {detail}</span>
+              </div>
+              <div className="h-1 w-full rounded-full" style={{ background: "#1A1208" }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, background: color, opacity: 0.8 }} />
+              </div>
+            </div>
+          ))}
+
+          {/* Multi-coin winning basket */}
+          <div className="mt-3">
+            <div className="text-xs font-mono mb-2" style={{ color: "#4A3A22" }}>WINNING BASKET · TARGET ALLOCATION</div>
+            <div className="flex gap-2">
+              {basket.map(({ symbol, pct, color, desc }) => (
+                <div key={symbol} className="flex-1 text-center p-2" style={{ background: "#0A0804", border: `1px solid ${color}20` }}>
+                  <div className="text-xs font-black font-mono mb-0.5" style={{ color }}>{symbol}</div>
+                  <div className="text-lg font-black font-mono" style={{ color }}>{pct}%</div>
+                  <div className="text-xs font-mono mt-0.5 leading-tight" style={{ color: "#3A2C16" }}>{desc}</div>
+                  <div className="mt-1.5 h-0.5 w-full rounded-full" style={{ background: color, opacity: 0.4 }} />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -656,14 +746,20 @@ export default function SilopolisPage() {
   }, [refresh]);
 
   const triggerCycle = async () => {
+    if (cycleRunning) return;
     setCycleRunning(true);
     try {
-      await fetch(`${API_BASE}/api/swarm/cycle`, {
+      const resp = await fetch(`${API_BASE}/api/swarm/cycle`, {
         method: "POST",
-        headers: FETCH_HEADERS,
+        headers: { ...FETCH_HEADERS, "Content-Type": "application/json" },
       });
-      setTimeout(refresh, 6000); // wait 6s for cycle to start, then refresh
-    } finally { setCycleRunning(false); }
+      if (!resp.ok) console.warn("Cycle trigger failed:", resp.status, await resp.text());
+      setTimeout(refresh, 8000); // wait 8s for heartbeat to start, then refresh leaderboard
+    } catch (e) {
+      console.error("Cycle trigger error:", e);
+    } finally {
+      setCycleRunning(false);
+    }
   };
 
   return (
@@ -744,7 +840,7 @@ export default function SilopolisPage() {
                 {totalTx} <span style={{ color: "#4A3A22" }}>EXCAVATIONS</span>
               </div>
               {/* Live heartbeat timer */}
-              <HeartbeatTimer apiBase={API_BASE} cycleIntervalSec={7200} />
+              <HeartbeatTimer apiBase={API_BASE} cycleIntervalSec={3600} />
 
               <button
                 onClick={triggerCycle}

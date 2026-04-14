@@ -193,6 +193,9 @@ class RiskGovernor:
     def tier(self) -> RiskTier:
         return get_risk_tier(self.state.okb_balance)
 
+    # Hard floor — never trade OKB below this threshold
+    OKB_FLOOR = float(os.environ.get("SILOPOLIS_OKB_FLOOR", "0.00222"))
+
     @property
     def can_trade(self) -> bool:
         """True if conditions allow a trade right now."""
@@ -201,9 +204,13 @@ class RiskGovernor:
         if not t.allow_trading:
             logger.info("[risk] No trading in %s tier (balance %.6f OKB)", t.name, self.state.okb_balance)
             return False
+        if self.state.okb_balance <= self.OKB_FLOOR:
+            logger.warning("[risk] OKB below floor (%.6f ≤ %.6f) — trading suspended until balance recovers",
+                           self.state.okb_balance, self.OKB_FLOOR)
+            return False
         if self.state.is_paused:
             remaining = self.state.paused_until - time.time()
-            logger.info("[risk] Trading paused for %.0f more seconds (3 consecutive losses)", remaining)
+            logger.info("[risk] Trading paused for %.0f more seconds", remaining)
             return False
         if self.state.daily_spent_okb >= t.max_daily_okb:
             logger.info("[risk] Daily OKB budget exhausted (%.6f / %.6f)", self.state.daily_spent_okb, t.max_daily_okb)
@@ -211,11 +218,13 @@ class RiskGovernor:
         return True
 
     def get_trade_size(self) -> float:
-        """Return the safe trade size for current conditions."""
+        """Return safe trade size — never risks dropping below OKB floor."""
         t = self.tier
+        # How much OKB can we safely spend without hitting the floor
+        spendable = max(0.0, self.state.okb_balance - self.OKB_FLOOR)
         base = get_max_trade_size(self.state.okb_balance, t)
         remaining_daily = t.max_daily_okb - self.state.daily_spent_okb
-        return round(min(base, remaining_daily), 6)
+        return round(min(base, remaining_daily, spendable * 0.1), 6)  # max 10% of spendable
 
     def check_confidence(self, confidence: int) -> bool:
         """Return True if confidence meets the tier's minimum.

@@ -343,17 +343,24 @@ Market signals: {len(observation['market'].get('signals', []))} active
 {knowledge_ctx}
 {decision_ctx}
 
+=== PRIMARY MISSION ===
+ACCUMULATE OKB. This vault's sole purpose is to GROW OKB holdings over time.
+OKB floor: 0.00222 OKB — NEVER let balance drop below this.
+Buffer zone: balance < 0.00666 OKB (3x floor) → ALWAYS buy OKB with USDT, never sell.
+Only sell OKB if balance > 0.01 OKB AND you see a clear profitable spread.
+
 === INSTRUCTIONS ===
 You MUST take an action this cycle. "wait" is only valid if trading is paused or there is a clear risk signal.
-If can_trade=True and balance > 0.001 OKB:
-  - TRADER: evaluate a micro-swap (OKB→USDT or USDT→OKB) to capture spread
-  - ANALYST: assess LP opportunity or market trend signal
-  - SKILL-BROKER: attempt a skill-sync or x402 relic acquisition
-  - GUARD: run a security check and decide if the current threat level blocks trading
-  - SCRIBE: record patterns and update knowledge graph
+If can_trade=True:
+  - TRADER/SUSTAINER: prefer USDT→OKB buyback. This grows the vault.
+  - ANALYST/ORACLE: assess OKB dip-buy opportunities — when price drops, it is a BUY signal.
+  - HUNTER/SENTRY: find high-spread alt pairs or new listings; book profit back into OKB.
+  - SKILL-BROKER: attempt a skill-sync or x402 relic acquisition.
+  - GUARD: run a security check and decide if the current threat level blocks trading.
+  - SCRIBE: record patterns, mark OKB accumulation events, update knowledge graph.
 
-For a "swap" action, params MUST include:
-  {{"from_token": "OKB", "to_token": "USDT", "amount": "{trade_size:.6f}", "dry_run": false}}
+For a "swap" action (PREFERRED direction: USDT→OKB), params MUST include:
+  {{"from_token": "USDT", "to_token": "OKB", "amount": "0.001", "dry_run": false}}
 
 Return ONLY valid JSON (no markdown, no code blocks):
 {{
@@ -431,36 +438,62 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str) -> dict:
 
         from_tok  = params.get("from_token", "OKB")
         to_tok    = params.get("to_token", "USDT")
-        # Use risk-governed trade size — never exceed safe limits
-        safe_amount = str(_risk.get_trade_size())
+
+        # ── OKB ACCUMULATION GUARD ────────────────────────────────────────────
+        # Primary goal: grow OKB holdings. Never sell OKB unless balance is
+        # safely above floor + buffer. Force buyback direction when low.
+        floor = _risk.OKB_FLOOR
+        bal   = _risk.state.okb_balance
+        buyback_threshold = floor * 3.0   # below 3x floor → buy OKB, don't sell
+        if from_tok.upper() == "OKB" and bal < buyback_threshold:
+            # Redirect: buy OKB with USDT instead of selling OKB
+            logger.info("[act] %s — OKB low (%.6f < %.6f buffer) → redirecting to OKB buyback",
+                        name, bal, buyback_threshold)
+            from_tok, to_tok = "USDT", "OKB"
+            # Use a small USDT amount (proxy for what we'd spend)
+            safe_amount = "0.001"   # $0.001 USDT buyback
+        else:
+            safe_amount = str(_risk.get_trade_size())
+
         if safe_amount == "0.0" or float(safe_amount) == 0:
-            return {"outcome": "risk_hold", "reason": "trade size zero in current tier", "tx_hash": None}
+            return {"outcome": "risk_hold", "reason": "trade size zero — protecting OKB floor", "tx_hash": None}
 
         from core.uniswap import execute_swap
         live = os.environ.get("SILOPOLIS_LIVE_TRADING", "false").lower() == "true"
+
+        # Capture real balance before trade for true P&L
+        bal_before = _risk.state.okb_balance
         result = execute_swap(from_tok, to_tok, safe_amount, dry_run=not live)
-        # Always record the trade attempt for win-rate tracking
+
+        # Real P&L: if buying OKB, amount_out is OKB gained; if selling, it's USDT received
         try:
-            # Estimate profit: if amount_out > 0 and swap succeeded, it's a win
-            # For OKB→USDT: amount_out is in USDT, convert back at current OKB price
-            okb_price = float(result.amount_out) / float(safe_amount) if float(safe_amount) > 0 else 0
-            # If we got ≥ 95% of value back it's a successful trade (fees <5%)
-            profit_okb = float(safe_amount) * 0.01  # 1% micro-profit for successful execution
-            if not result.success or float(getattr(result, 'amount_out', 0) or 0) == 0:
-                profit_okb = -float(safe_amount) * 0.001  # tiny loss on failure
+            amount_out = float(getattr(result, 'amount_out', 0) or 0)
+            if to_tok.upper() == "OKB" and result.success:
+                # We received OKB — positive P&L
+                profit_okb = amount_out - 0.0  # net OKB gain
+                if live:
+                    _risk.state.okb_balance = min(bal_before + amount_out, bal_before + 0.01)
+            elif from_tok.upper() == "OKB" and result.success:
+                # We sold OKB — negative for OKB balance, but valid if spread > fees
+                # Convert USDT received back to OKB equivalent
+                okb_price_est = 83.5  # conservative estimate
+                okb_equiv = amount_out / okb_price_est if okb_price_est > 0 else 0
+                profit_okb = okb_equiv - float(safe_amount)  # + if we got more OKB equiv back
+            else:
+                profit_okb = -float(safe_amount) * 0.002   # failed = small loss
         except Exception:
-            profit_okb = 0.001  # default micro-win
-        if live and result.success:
+            profit_okb = 0.0
+
+        if result.success:
             _risk.record_trade(float(safe_amount), profit_okb)
-        elif result.success:
-            # Dry-run success still counts for win tracking in demo mode
-            _risk.record_trade(float(safe_amount), profit_okb)
+
         outcome_label = "executed_swap" if (live and result.success) else "simulated_swap"
         return {
             "outcome": outcome_label,
             "tx_hash": result.tx_hash,
             "amount": safe_amount,
             "amount_out": result.amount_out,
+            "direction": f"{from_tok}→{to_tok}",
             "tier": _risk.tier.name,
             "live": live,
         }

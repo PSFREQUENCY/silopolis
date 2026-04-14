@@ -9,7 +9,7 @@ ROOT="$SCRIPT_DIR/.."
 
 echo "╔══════════════════════════════════════════════════╗"
 echo "║         SILOPOLIS HEARTBEAT DAEMON               ║"
-echo "║         12 cycles per day · X Layer             ║"
+echo "║         24 cycles per day · X Layer             ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 
