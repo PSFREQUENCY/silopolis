@@ -5,9 +5,22 @@
  * An addictive digital brain where signals clump into skills,
  * skills link to knowledge, knowledge fires trades.
  * Every connection is provable reasoning. Public proof of work.
+ * Wired to /api/feed — cascades show real agent activity.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+const FETCH_HEADERS: HeadersInit = { "Bypass-Tunnel-Reminder": "true" };
+
+interface FeedItem {
+  ts: string;
+  agent: string;
+  action: string;
+  reasoning: string;
+  confidence: number;
+  tx_hash?: string | null;
+}
 
 // ── Neural node map ───────────────────────────────────────────────────────────
 

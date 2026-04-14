@@ -2,8 +2,8 @@
 
 /**
  * SILOPOLIS — Live Price Ticker
- * Fixed footer scrolling ticker. Fetches real OKB price from /api/feed on mount,
- * then micro-fluctuates all prices every 4s for visual liveliness.
+ * Fetches real prices from /api/prices (OKX public API) every 30s.
+ * Micro-fluctuates in between for visual liveliness.
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -18,20 +18,20 @@ interface TickerToken {
   highlight?: boolean;
 }
 
-// Baseline prices — OKB gets overwritten from live API on mount
-const BASE_TOKENS: TickerToken[] = [
-  { sym: "OKB",   price: 85.15,   change: +2.8,   highlight: true  },
-  { sym: "ETH",   price: 3420.50, change: +1.9              },
-  { sym: "BTC",   price: 84250.00,change: +0.7              },
-  { sym: "SOL",   price: 178.50,  change: +3.4              },
-  { sym: "USDT",  price: 1.0002,  change: -0.01             },
-  { sym: "SWRMX", price: 0.00890, change: +21.2,  highlight: true  },
-  { sym: "NEURAL",price: 0.00670, change: +346.7, highlight: true  },
-  { sym: "INTNT", price: 0.3420,  change: +302.4, highlight: true  },
-  { sym: "CORTX", price: 0.000095,change:+1087.5, highlight: true  },
-  { sym: "OKT",   price: 15.80,   change: +4.2              },
-  { sym: "USDC",  price: 0.9999,  change: 0.01              },
-  { sym: "ZKPRF", price: 0.0560,  change: +22.4             },
+// Seed values — immediately overwritten from live API on mount
+const SEED_TOKENS: TickerToken[] = [
+  { sym: "OKB",   price: 84.89,     change: +2.8,    highlight: true  },
+  { sym: "BTC",   price: 74497.0,   change: +0.7               },
+  { sym: "ETH",   price: 2373.82,   change: +1.9               },
+  { sym: "SOL",   price: 85.90,     change: +3.4               },
+  { sym: "OKT",   price: 15.80,     change: +4.2               },
+  { sym: "USDT",  price: 1.0000,    change:  0.0               },
+  { sym: "USDC",  price: 0.9999,    change:  0.01              },
+  { sym: "SWRMX", price: 0.00890,   change: +21.2,   highlight: true  },
+  { sym: "NEURAL",price: 0.00670,   change: +346.7,  highlight: true  },
+  { sym: "INTNT", price: 0.3420,    change: +302.4,  highlight: true  },
+  { sym: "CORTX", price: 0.000095,  change:+1087.5,  highlight: true  },
+  { sym: "ZKPRF", price: 0.0560,    change: +22.4               },
 ];
 
 function fmtPrice(p: number): string {
@@ -44,41 +44,47 @@ function fmtPrice(p: number): string {
 }
 
 export default function PriceTicker() {
-  const [tokens, setTokens] = useState<TickerToken[]>(BASE_TOKENS);
+  const [tokens, setTokens] = useState<TickerToken[]>(SEED_TOKENS);
   const trackRef = useRef<HTMLDivElement>(null);
 
-  // Fetch live OKB price from API on mount
+  // Fetch real prices from OKX API via our backend
+  const fetchPrices = async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/prices`, { headers: FETCH_HEADERS });
+      if (!r.ok) return;
+      const data = await r.json();
+      const prices: Record<string, number> = data.prices ?? {};
+      const changes: Record<string, number> = data.change24h ?? {};
+      if (!Object.keys(prices).length) return;
+      setTokens(prev => prev.map(t => {
+        const livePrice = prices[t.sym];
+        if (!livePrice) return t;
+        return {
+          ...t,
+          price: livePrice,
+          change: changes[t.sym] ?? t.change,
+        };
+      }));
+    } catch {
+      // Stay on current values
+    }
+  };
+
   useEffect(() => {
-    const fetchLive = async () => {
-      try {
-        // /api/feed returns okb_price from market_snapshots
-        const r = await fetch(`${API_BASE}/api/feed?limit=1`, { headers: FETCH_HEADERS });
-        if (!r.ok) return;
-        const data = await r.json();
-        const okbPrice = data.okb_price;
-        if (okbPrice && okbPrice > 0) {
-          setTokens(prev => prev.map(t =>
-            t.sym === "OKB" ? { ...t, price: parseFloat(okbPrice.toFixed(4)) } : t
-          ));
-        }
-      } catch {
-        // Stay on baseline
-      }
-    };
-    fetchLive();
-    // Refresh live price every 60s
-    const iv = setInterval(fetchLive, 60_000);
+    fetchPrices();
+    const iv = setInterval(fetchPrices, 30_000);
     return () => clearInterval(iv);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Micro price fluctuations every 4s for visual liveliness
+  // Micro-fluctuations every 4s for visual liveliness between API refreshes
   useEffect(() => {
     const iv = setInterval(() => {
       setTokens(prev => prev.map(t => {
         if (t.sym === "USDT" || t.sym === "USDC") return t;
-        const delta = (Math.random() - 0.49) * 0.003;
-        const changeDelta = (Math.random() - 0.48) * 0.08;
-        return { ...t, price: t.price * (1 + delta), change: t.change + changeDelta };
+        const delta = (Math.random() - 0.49) * 0.0025;
+        const changeDelta = (Math.random() - 0.48) * 0.06;
+        return { ...t, price: Math.max(t.price * (1 + delta), 0.0000001), change: t.change + changeDelta };
       }));
     }, 4000);
     return () => clearInterval(iv);
@@ -125,7 +131,7 @@ export default function PriceTicker() {
           style={{
             display: "flex", alignItems: "center",
             whiteSpace: "nowrap",
-            animation: "ticker-scroll 55s linear infinite",
+            animation: "ticker-scroll 60s linear infinite",
           }}
         >
           {items.map((t, i) => (
