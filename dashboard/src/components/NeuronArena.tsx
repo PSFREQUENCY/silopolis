@@ -181,10 +181,10 @@ interface ChainStep {
 interface RenderedTxNode {
   x: number; y: number;
   color: string;
-  tx_hash: string;
+  tx_hash?: string;
   agent: string;
   action: string;
-  txLink: string;
+  txLink?: string;        // only set when real on-chain tx_hash exists
   is_x402: boolean;
   pulsePhase: number;
 }
@@ -575,10 +575,10 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
         };
       });
 
-      // Check hover on TX nodes
+      // Check hover on TX nodes — 44px threshold for easy interaction
       let newHoveredIdx: number | null = null;
       if (mp) {
-        let closestDist = 28; // px threshold
+        let closestDist = 44;
         txMeshNodesRef.current.forEach((tn, i) => {
           const dx = tn.x - mp.x, dy = tn.y - mp.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
@@ -588,12 +588,12 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
       hoveredTxIdxRef.current = newHoveredIdx;
       canvas.style.cursor = newHoveredIdx !== null ? "pointer" : "default";
 
-      // Draw TX mesh nodes (holographic neon particles)
+      // Draw TX mesh nodes (holographic neon particles) — faded mesh layer behind main agents
       const phaseTick = frame * 0.04;
       txMeshNodesRef.current.forEach((tn, i) => {
         const isHovered = i === newHoveredIdx;
         const pulse = 1 + Math.sin(tn.pulsePhase + phaseTick) * 0.3;
-        const baseR = isHovered ? 7 : 3.5;
+        const baseR = isHovered ? 10 : 5;
         const r = baseR * pulse;
 
         // Connect TX node to nearby mesh nodes — cap at 40 nearest to prevent frame drops
@@ -616,8 +616,8 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
           }
         }
 
-        // Outer glow
-        const gAlpha = isHovered ? 0.55 : 0.2;
+        // Outer glow — tx nodes are the mesh layer (visible but softer than main NODES)
+        const gAlpha = isHovered ? 0.7 : 0.38;
         const gR = r * (isHovered ? 5 : 3.5);
         const tg = ctx.createRadialGradient(tn.x, tn.y, 0, tn.x, tn.y, gR);
         tg.addColorStop(0, `${tn.color}${Math.round(gAlpha * 255).toString(16).padStart(2, "0")}`);
@@ -627,35 +627,54 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
         ctx.arc(tn.x, tn.y, gR, 0, Math.PI * 2);
         ctx.fill();
 
-        // Core dot
-        ctx.globalAlpha = isHovered ? 1 : 0.65;
+        // Core dot — brighter on hover
+        ctx.globalAlpha = isHovered ? 1 : 0.75;
         ctx.fillStyle = tn.color;
         ctx.beginPath();
         ctx.arc(tn.x, tn.y, r, 0, Math.PI * 2);
         ctx.fill();
 
-        // x402 indicator — extra ring
+        // Green ring for verified on-chain TX
+        if (tn.tx_hash) {
+          ctx.globalAlpha = isHovered ? 0.9 : 0.45;
+          ctx.strokeStyle = "#22c55e";
+          ctx.lineWidth = isHovered ? 1.5 : 0.8;
+          ctx.beginPath();
+          ctx.arc(tn.x, tn.y, r * 2.1, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // x402 indicator — purple ring
         if (tn.is_x402) {
-          ctx.globalAlpha = isHovered ? 0.9 : 0.35;
+          ctx.globalAlpha = isHovered ? 0.9 : 0.45;
           ctx.strokeStyle = "#C084FC";
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.arc(tn.x, tn.y, r * 2.2, 0, Math.PI * 2);
+          ctx.arc(tn.x, tn.y, r * 2.8, 0, Math.PI * 2);
           ctx.stroke();
         }
 
         ctx.globalAlpha = 1;
 
-        // Hover label
+        // Hover label — show agent, action, tx hash if exists
         if (isHovered) {
           const label = `${tn.agent.replace("SILO-", "")} · ${tn.action}${tn.is_x402 ? " · x402" : ""}`;
           ctx.font = "bold 10px 'JetBrains Mono', monospace";
           ctx.fillStyle = tn.color;
           ctx.textAlign = "center";
+          ctx.shadowColor = tn.color;
+          ctx.shadowBlur = 10;
           ctx.fillText(label, tn.x, tn.y - r * 3 - 4);
-          ctx.font = "9px 'JetBrains Mono', monospace";
-          ctx.fillStyle = "rgba(218,165,32,0.7)";
-          ctx.fillText(tn.tx_hash.slice(0, 16) + "… ↗", tn.x, tn.y - r * 3 + 10);
+          ctx.shadowBlur = 0;
+          if (tn.tx_hash) {
+            ctx.font = "9px 'JetBrains Mono', monospace";
+            ctx.fillStyle = "#22c55e";
+            ctx.fillText(tn.tx_hash.slice(0, 16) + "… ↗", tn.x, tn.y - r * 3 + 10);
+          } else {
+            ctx.font = "9px 'JetBrains Mono', monospace";
+            ctx.fillStyle = "rgba(218,165,32,0.55)";
+            ctx.fillText("click to explore", tn.x, tn.y - r * 3 + 10);
+          }
         }
       });
 
@@ -681,7 +700,7 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
       ctx.globalAlpha = 1;
 
       // ── LAYER 2 — Edge mesh (main neuron edges) ───────────────────────────────
-      ctx.lineWidth = 0.5;
+      ctx.lineWidth = 1.2;
       EDGES.forEach(([f, t]) => {
         const key = `${f}-${t}`;
         const b = beziers[key];
@@ -689,7 +708,7 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
         const fromNode = NODES.find(n => n.id === f)!;
         const act1 = nodeActivity[f] ?? 0;
         const act2 = nodeActivity[t] ?? 0;
-        const baseAlpha = 0.055 + Math.max(act1, act2) * 0.18;
+        const baseAlpha = 0.2 + Math.max(act1, act2) * 0.5;
         ctx.strokeStyle = `rgba(${fromNode.rgb},${baseAlpha})`;
         ctx.beginPath();
         ctx.moveTo(b.ax, b.ay);
@@ -697,53 +716,62 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
         ctx.stroke();
       });
 
-      // ── LAYER 3 — Node glow + core ────────────────────────────────────────────
+      // ── LAYER 3 — Node glow + core (BRIGHT — top visual layer) ──────────────
       NODES.forEach(n => {
         const nx = n.xp * W, ny = n.yp * H;
         const act = nodeActivity[n.id] ?? 0;
         if (act > 0) nodeActivity[n.id] = Math.max(0, act - 0.012);
 
         const pulse = 1 + Math.sin(frame * 0.025 + NODES.indexOf(n) * 0.8) * 0.18;
-        const baseR = (14 + act * 10) * pulse;
+        const baseR = (18 + act * 12) * pulse;
 
-        const glow = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR * 4.5);
-        glow.addColorStop(0, `rgba(${n.rgb},${0.25 + act * 0.4})`);
-        glow.addColorStop(0.35, `rgba(${n.rgb},${0.06 + act * 0.1})`);
-        glow.addColorStop(1, "transparent");
+        // Wide outer glow halo — always bright
+        const glow = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR * 5);
+        glow.addColorStop(0,    `rgba(${n.rgb},${0.72 + act * 0.28})`);
+        glow.addColorStop(0.3,  `rgba(${n.rgb},${0.28 + act * 0.2})`);
+        glow.addColorStop(0.7,  `rgba(${n.rgb},${0.08 + act * 0.08})`);
+        glow.addColorStop(1,    "transparent");
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.arc(nx, ny, baseR * 4.5, 0, Math.PI * 2);
+        ctx.arc(nx, ny, baseR * 5, 0, Math.PI * 2);
         ctx.fill();
 
+        // Node body — solid and bright
         ctx.beginPath();
         ctx.arc(nx, ny, baseR, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${n.rgb},${0.18 + act * 0.25})`;
-        ctx.strokeStyle = `rgba(${n.rgb},${0.6 + act * 0.4})`;
-        ctx.lineWidth = 1.5;
+        ctx.fillStyle = `rgba(${n.rgb},${0.62 + act * 0.38})`;
+        ctx.strokeStyle = `rgba(${n.rgb},${0.95})`;
+        ctx.lineWidth = 2;
         ctx.fill();
         ctx.stroke();
 
-        const dotR = baseR * 0.35;
+        // Bright core dot
+        const dotR = baseR * 0.38;
         ctx.beginPath();
         ctx.arc(nx, ny, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${n.rgb},${0.5 + act * 0.5})`;
+        ctx.fillStyle = `rgba(${n.rgb},${0.98})`;
         ctx.fill();
 
+        // Rotating hexagon ring — visible
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2 - Math.PI / 6 + frame * 0.003;
-          const hx = nx + Math.cos(a) * baseR * 1.6, hy = ny + Math.sin(a) * baseR * 1.6;
+          const hx = nx + Math.cos(a) * baseR * 1.65, hy = ny + Math.sin(a) * baseR * 1.65;
           if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
         }
         ctx.closePath();
-        ctx.strokeStyle = `rgba(${n.rgb},${0.12 + act * 0.25})`;
-        ctx.lineWidth = 0.7;
+        ctx.strokeStyle = `rgba(${n.rgb},${0.45 + act * 0.4})`;
+        ctx.lineWidth = 1;
         ctx.stroke();
 
-        ctx.font = "bold 9px 'JetBrains Mono', monospace";
-        ctx.fillStyle = `rgba(${n.rgb},${0.55 + act * 0.45})`;
+        // Label — always readable
+        ctx.font = "bold 10px 'JetBrains Mono', monospace";
+        ctx.fillStyle = `rgba(${n.rgb},${0.95})`;
         ctx.textAlign = "center";
-        ctx.fillText(n.label, nx, ny + baseR + 14);
+        ctx.shadowColor = `rgba(${n.rgb},0.9)`;
+        ctx.shadowBlur = 8;
+        ctx.fillText(n.label, nx, ny + baseR + 16);
+        ctx.shadowBlur = 0;
       });
 
       // ── LAYER 4 — Auto-launch cascade ─────────────────────────────────────────

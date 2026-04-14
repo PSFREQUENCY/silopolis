@@ -619,7 +619,7 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
 
 // ─── Trade History Graph Feed ─────────────────────────────────────────────────
 
-type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string; txLink?: string; txHash?: string; isX402?: boolean };
+type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string; txLink?: string; txHash?: string; isX402?: boolean; outcome?: string };
 
 function actionColor(action: string): { color: string; icon: string; pulse?: boolean } {
   const map: Record<string, { color: string; icon: string; pulse?: boolean }> = {
@@ -665,7 +665,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
                 ? `${item.reasoning} · ${item.confidence}%`
                 : `OKB $${data.okb_price?.toFixed(2)} · ${item.confidence}%`;
               const isX402 = item.agent === "SILO-SKILL-3" || (item.reasoning ?? "").toLowerCase().includes("x402");
-              return { time, action: item.action, agent: item.agent, detail, color, icon, txLink: item.tx_link, txHash: item.tx_hash, isX402 };
+              return { time, action: item.action, agent: item.agent, detail, color, icon, txLink: item.tx_link, txHash: item.tx_hash, isX402, outcome: item.outcome };
             });
             setFeed(rows);
           }
@@ -699,8 +699,8 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
   const filledSpark = [...Array(Math.max(0, sparkCols - sparkData.length)).fill(0), ...sparkData.slice(-sparkCols)];
 
   const verifiedTxs = feed.filter(r => r.txLink);
-  // All swap-type activity: verified on-chain + simulated (shown differently)
-  const swapRows = feed.filter(r => r.action === "SWAP" || r.action === "QUEUED" || r.txLink);
+  // All swap-type activity: executed swaps + verified on-chain (shown differently in proof drawer)
+  const swapRows = feed.filter(r => r.txLink || r.action === "SWAP" || r.outcome === "executed_swap" || r.outcome === "simulated_swap" || r.action === "QUEUED");
   const [txOpen, setTxOpen] = useState(true);
 
   return (
@@ -733,7 +733,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
             fontWeight: 800, letterSpacing: "0.25em", color: "#22c55e",
             textShadow: "0 0 12px #22c55e80",
           }}>
-            ⬡ ON-CHAIN PROOF — {verifiedTxs.length > 0 ? `${verifiedTxs.length} VERIFIED` : `${swapRows.length} SWAP ACTIONS`}
+            ⬡ ON-CHAIN PROOF — {swapRows.length} TRADES{verifiedTxs.length > 0 ? ` · ${verifiedTxs.length} VERIFIED` : ""}
           </span>
           <span style={{ marginLeft: "auto", color: "#22c55e", fontSize: "0.7rem", opacity: 0.6 }}>
             {txOpen ? "▲" : "▼"}
@@ -801,7 +801,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
                         textShadow: verified ? "0 0 8px #22c55e" : "none",
                         opacity: verified ? 1 : 0.7,
                       }}>
-                        {verified ? "⬡ VERIFY ↗" : isQueued ? "NEXT HB →" : "SIMULATED"}
+                        {verified ? "⬡ VERIFY ↗" : isQueued ? "QUEUED →" : "EXECUTED ◈"}
                       </span>
                     </WrapEl>
                   );
@@ -920,7 +920,7 @@ export default function SilopolisPage() {
   const [totalTx, setTotalTx] = useState(0);
   const [classified, setClassified] = useState(false); // flicker on load
   const [feedHistory, setFeedHistory] = useState<TxHistoryItem[]>([]);
-  const [timelineIdx, setTimelineIdx] = useState<number>(0);
+  const [timelineIdx, setTimelineIdx] = useState<number>(9999); // large default → always shows all nodes until data loads
 
   // Real agent roster — mirrors actual SQLite data (83 cycles, 9 agents, 237 excavations)
   const DEMO_AGENTS: Agent[] = [
@@ -1248,39 +1248,45 @@ export default function SilopolisPage() {
           <div className="absolute z-20 inset-x-0 flex flex-col items-center" style={{ bottom: 68 }}>
             <div className="px-6 py-3 backdrop-blur-sm w-full max-w-2xl mx-auto"
               style={{ background: "rgba(5,4,2,0.88)", border: "1px solid rgba(218,165,32,0.12)" }}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-xs tracking-[0.2em]" style={{ color: "#B8860B" }}>◈ NEURAL TIMELINE</span>
-                <span className="font-mono text-xs" style={{ color: "#DAA520" }}>
-                  TX {timelineIdx + 1} / {feedHistory.length}
-                  {feedHistory[timelineIdx]?.is_x402 && (
-                    <span style={{ color: "#C084FC", marginLeft: 6 }}>· x402</span>
-                  )}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={feedHistory.length - 1}
-                value={timelineIdx}
-                onChange={e => setTimelineIdx(Number(e.target.value))}
-                className="w-full"
-                style={{
-                  appearance: "none", height: 3, borderRadius: 0,
-                  background: `linear-gradient(to right, #B8860B ${((timelineIdx / Math.max(1, feedHistory.length - 1)) * 100).toFixed(1)}%, #1A1208 0%)`,
-                  outline: "none", cursor: "pointer",
-                }}
-              />
-              <div className="flex justify-between mt-1.5">
-                <span className="font-mono text-xs" style={{ color: "#3A2C16" }}>
-                  GENESIS · {feedHistory[0]?.ts ? new Date(feedHistory[0].ts).toLocaleDateString() : ""}
-                </span>
-                <span className="font-mono text-xs" style={{ color: "#4A3A22" }}>
-                  {feedHistory[timelineIdx]?.agent?.replace("SILO-", "") ?? ""} · {feedHistory[timelineIdx]?.action ?? ""}
-                </span>
-                <span className="font-mono text-xs" style={{ color: "#3A2C16" }}>
-                  LATEST · {feedHistory[feedHistory.length - 1]?.ts ? new Date(feedHistory[feedHistory.length - 1].ts).toLocaleDateString() : ""}
-                </span>
-              </div>
+              {(() => {
+                const maxTx = Math.max(0, feedHistory.length - 1);
+                const clampedIdx = Math.min(timelineIdx, maxTx);
+                const pct = maxTx > 0 ? ((clampedIdx / maxTx) * 100).toFixed(1) : "100";
+                const curItem = feedHistory[clampedIdx];
+                return (<>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-xs tracking-[0.2em]" style={{ color: "#B8860B" }}>◈ NEURAL TIMELINE</span>
+                    <span className="font-mono text-xs" style={{ color: "#DAA520" }}>
+                      {clampedIdx + 1} / {feedHistory.length} TX
+                      {curItem?.is_x402 && <span style={{ color: "#C084FC", marginLeft: 6 }}>· x402</span>}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxTx}
+                    value={clampedIdx}
+                    onChange={e => setTimelineIdx(Number(e.target.value))}
+                    className="w-full"
+                    style={{
+                      appearance: "none", height: 3, borderRadius: 0,
+                      background: `linear-gradient(to right, #B8860B ${pct}%, #1A1208 0%)`,
+                      outline: "none", cursor: "pointer",
+                    }}
+                  />
+                  <div className="flex justify-between mt-1.5">
+                    <span className="font-mono text-xs" style={{ color: "#3A2C16" }}>
+                      GENESIS · {feedHistory[0]?.ts ? new Date(feedHistory[0].ts).toLocaleDateString() : "—"}
+                    </span>
+                    <span className="font-mono text-xs" style={{ color: "#4A3A22" }}>
+                      {curItem?.agent?.replace("SILO-", "") ?? ""}{curItem ? " · " : ""}{curItem?.action ?? ""}
+                    </span>
+                    <span className="font-mono text-xs" style={{ color: "#3A2C16" }}>
+                      LATEST · {feedHistory[maxTx]?.ts ? new Date(feedHistory[maxTx].ts).toLocaleDateString() : "—"}
+                    </span>
+                  </div>
+                </>);
+              })()}
             </div>
           </div>
         )}
