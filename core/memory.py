@@ -65,8 +65,9 @@ CREATE TABLE IF NOT EXISTS decision_log (
     cycle_id    TEXT NOT NULL,
     context     TEXT NOT NULL,
     decision    TEXT NOT NULL,
-    outcome     TEXT,              -- filled in by next cycle
+    outcome     TEXT,              -- filled in after act()
     profit_usd  REAL,
+    tx_hash     TEXT,              -- on-chain tx hash if swap executed
     threat_score INTEGER,
     model_used  TEXT,
     latency_ms  INTEGER,
@@ -130,6 +131,12 @@ def init_db() -> None:
     """Create tables if they don't exist. Safe to call on every startup."""
     with _conn() as con:
         con.executescript(_SCHEMA)
+        # Migration: add tx_hash column if it doesn't exist yet
+        try:
+            con.execute("ALTER TABLE decision_log ADD COLUMN tx_hash TEXT")
+            logger.info("Migrated decision_log: added tx_hash column")
+        except Exception:
+            pass  # already exists
     logger.info("Memory DB ready: %s", DB_PATH)
 
 
@@ -311,14 +318,15 @@ def update_decision_outcome(
     decision_id: int,
     outcome: str,
     profit_usd: float | None = None,
+    tx_hash: str | None = None,
 ) -> None:
     """Fill in outcome after observing what happened."""
     with _conn() as con:
         con.execute("""
             UPDATE decision_log
-            SET outcome = ?, profit_usd = ?
+            SET outcome = ?, profit_usd = ?, tx_hash = ?
             WHERE id = ?
-        """, (outcome, profit_usd, decision_id))
+        """, (outcome, profit_usd, tx_hash, decision_id))
 
 
 def get_decision_history(

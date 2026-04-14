@@ -727,8 +727,12 @@ def run_heartbeat() -> dict:
             outcome = act(agent_def, decision, heartbeat_id, observation)
             all_outcomes.append({"agent": name, **outcome})
 
-            # Update decision outcome
-            memory.update_decision_outcome(decision_id, outcome.get("outcome", "unknown"))
+            # Update decision outcome — capture tx_hash if on-chain swap occurred
+            memory.update_decision_outcome(
+                decision_id,
+                outcome.get("outcome", "unknown"),
+                tx_hash=outcome.get("tx_hash") or None,
+            )
 
             # Learn
             learn(agent_def, decision, outcome)
