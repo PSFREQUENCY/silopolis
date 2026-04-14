@@ -461,30 +461,29 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str) -> dict:
         from core.uniswap import execute_swap
         live = os.environ.get("SILOPOLIS_LIVE_TRADING", "false").lower() == "true"
 
-        # Capture real balance before trade for true P&L
-        bal_before = _risk.state.okb_balance
         result = execute_swap(from_tok, to_tok, safe_amount, dry_run=not live)
 
-        # Real P&L: if buying OKB, amount_out is OKB gained; if selling, it's USDT received
-        try:
-            amount_out = float(getattr(result, 'amount_out', 0) or 0)
-            if to_tok.upper() == "OKB" and result.success:
-                # We received OKB — positive P&L
-                profit_okb = amount_out - 0.0  # net OKB gain
-                if live:
-                    _risk.state.okb_balance = min(bal_before + amount_out, bal_before + 0.01)
-            elif from_tok.upper() == "OKB" and result.success:
-                # We sold OKB — negative for OKB balance, but valid if spread > fees
-                # Convert USDT received back to OKB equivalent
-                okb_price_est = 83.5  # conservative estimate
-                okb_equiv = amount_out / okb_price_est if okb_price_est > 0 else 0
-                profit_okb = okb_equiv - float(safe_amount)  # + if we got more OKB equiv back
-            else:
-                profit_okb = -float(safe_amount) * 0.002   # failed = small loss
-        except Exception:
-            profit_okb = 0.0
+        # ── Real P&L (only recorded for LIVE trades, not dry-runs) ───────────
+        # API returns amounts in raw token units:
+        #   OKB  → 18 decimals (wei)   e.g. 1e15 = 0.001 OKB
+        #   USDT → 6  decimals (µUSDT) e.g. 83500 = 0.0835 USDT
+        _TOKEN_DEC = {"OKB": 18, "USDT": 6, "USDC": 6}
+        profit_okb = 0.0
+        if live and result.success:
+            try:
+                raw_out = float(getattr(result, 'amount_out', 0) or 0)
+                to_dec = _TOKEN_DEC.get(to_tok.upper(), 18)
+                amount_out_human = raw_out / (10 ** to_dec)
 
-        if result.success:
+                if to_tok.upper() == "OKB":
+                    # Received OKB — direct gain
+                    profit_okb = amount_out_human
+                elif from_tok.upper() == "OKB":
+                    # Sold OKB for USDT — convert back to OKB equiv
+                    okb_price = float(obs_okb_price) if 'obs_okb_price' in dir() else 85.0
+                    profit_okb = (amount_out_human / okb_price) - float(safe_amount)
+            except Exception:
+                profit_okb = 0.0
             _risk.record_trade(float(safe_amount), profit_okb)
 
         outcome_label = "executed_swap" if (live and result.success) else "simulated_swap"
