@@ -18,7 +18,7 @@ export interface TxHistoryItem {
   ts: string;
   agent: string;
   action: string;
-  tx_hash: string;
+  tx_hash?: string;   // undefined for simulated/queued actions
   color: string;
   is_x402: boolean;
 }
@@ -416,7 +416,10 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
         const tn = txMeshNodesRef.current[idx];
         if (tn) {
           megaExplodeRef.current = { color: tn.color };
-          setTimeout(() => window.open(tn.txLink, "_blank", "noopener"), 420);
+          // Only open OKLink if there is a real on-chain tx_hash
+          if (tn.txLink) {
+            setTimeout(() => window.open(tn.txLink, "_blank", "noopener"), 420);
+          }
         }
       }
     }
@@ -542,10 +545,11 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
       const maxIdx = timelineIdxRef.current !== undefined ? timelineIdxRef.current : histItems.length - 1;
       const visibleItems = histItems.slice(0, maxIdx + 1);
 
-      // Assign stable random positions to new tx_hashes
+      // Assign stable random positions — use ts+agent as key so undefined tx_hash doesn't collide
       visibleItems.forEach(tx => {
-        if (!txPositionMapRef.current.has(tx.tx_hash)) {
-          txPositionMapRef.current.set(tx.tx_hash, {
+        const stableKey = tx.tx_hash || `${tx.ts}_${tx.agent}`;
+        if (!txPositionMapRef.current.has(stableKey)) {
+          txPositionMapRef.current.set(stableKey, {
             xf: 0.06 + Math.random() * 0.88,
             yf: 0.06 + Math.random() * 0.88,
             pulsePhase: Math.random() * Math.PI * 2,
@@ -555,7 +559,9 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
 
       // Build rendered array
       txMeshNodesRef.current = visibleItems.map(tx => {
-        const pos = txPositionMapRef.current.get(tx.tx_hash)!;
+        const stableKey = tx.tx_hash || `${tx.ts}_${tx.agent}`;
+        const pos = txPositionMapRef.current.get(stableKey) ?? { xf: 0.5, yf: 0.5, pulsePhase: 0 };
+        const validTxLink = tx.tx_hash ? `https://www.oklink.com/xlayer/tx/${tx.tx_hash}` : undefined;
         return {
           x: pos.xf * W,
           y: pos.yf * H,
@@ -563,7 +569,7 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
           tx_hash: tx.tx_hash,
           agent: tx.agent,
           action: tx.action,
-          txLink: `https://www.oklink.com/xlayer/tx/${tx.tx_hash}`,
+          txLink: validTxLink,
           is_x402: tx.is_x402,
           pulsePhase: pos.pulsePhase,
         };
@@ -590,9 +596,11 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
         const baseR = isHovered ? 7 : 3.5;
         const r = baseR * pulse;
 
-        // Connect TX node to nearby mesh nodes
+        // Connect TX node to nearby mesh nodes — cap at 40 nearest to prevent frame drops
         if (isHovered) {
-          meshNodes.forEach(m => {
+          let connCount = 0;
+          for (let mi = 0; mi < meshNodes.length && connCount < 40; mi++) {
+            const m = meshNodes[mi];
             const dx = m.x - tn.x, dy = m.y - tn.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < MESH_CONNECT_DIST * 0.8) {
@@ -603,8 +611,9 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
               ctx.moveTo(tn.x, tn.y);
               ctx.lineTo(m.x, m.y);
               ctx.stroke();
+              connCount++;
             }
-          });
+          }
         }
 
         // Outer glow

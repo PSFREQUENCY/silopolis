@@ -350,7 +350,7 @@ def heartbeat_status():
             running = result.returncode == 0
         except Exception:
             running = False
-        interval = int(os.environ.get("SILOPOLIS_HEARTBEAT_INTERVAL", "7200").split()[0])
+        interval = int(os.environ.get("SILOPOLIS_HEARTBEAT_INTERVAL", "1800").split()[0])
         return {
             "last_heartbeat": last,
             "total_cycles": len(all_hb),
@@ -497,9 +497,7 @@ def cipher_feed(limit: int = 20):
                    CASE WHEN json_valid(decision)
                         THEN substr(json_extract(decision, '$.reasoning'), 1, 120)
                         ELSE '' END as reasoning,
-                   CASE WHEN json_valid(decision)
-                        THEN json_extract(decision, '$.params.tx_hash')
-                        ELSE NULL END as tx_hash
+                   tx_hash
             FROM decision_log
             ORDER BY timestamp DESC
             LIMIT ?

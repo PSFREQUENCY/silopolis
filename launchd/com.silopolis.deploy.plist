@@ -2,14 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  SILOPOLIS — Auto Deploy to Vercel LaunchAgent
-  ==============================================
-  Runs auto_deploy.sh every 10 minutes.
-  • If dashboard/ has uncommitted changes: git commit + push to GitHub
-  • Always: vercel --prod --yes (fast with build cache if nothing changed)
+  SILOPOLIS — Auto-commit to GitHub (NOT direct Vercel deploy)
+  =============================================================
+  Runs auto_deploy.sh every 30 minutes.
+  • If dashboard/, core/, or api/ have uncommitted changes: git commit + push
+  • Vercel GitHub integration handles production builds automatically on push
+  • This script NEVER calls `vercel` directly
 
-  RunAtLoad: true → deploy immediately on plist load (shows latest code right away)
-  StartInterval: 600 → check every 10 minutes
+  StartInterval: 1800 → check every 30 minutes
+  RunAtLoad: false → do NOT deploy immediately on load
 
   Logs:
     tail -f /tmp/silopolis-deploy.log
@@ -22,19 +23,16 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/funmen/silopolis/scripts/auto_deploy.sh</string>
+        <string>-c</string>
+        <string>cd "$(dirname "$0")/.." &amp;&amp; bash scripts/auto_deploy.sh</string>
     </array>
 
     <key>WorkingDirectory</key>
     <string>/Users/funmen/silopolis</string>
 
-    <!-- Deploy immediately on plist load -->
-    <key>RunAtLoad</key>
-    <true/>
-
-    <!-- Repeat every 10 minutes (600 seconds) -->
+    <!-- Check every 30 minutes — Vercel deploys on git push, not on every run -->
     <key>StartInterval</key>
-    <integer>600</integer>
+    <integer>1800</integer>
 
     <key>StandardOutPath</key>
     <string>/tmp/silopolis-deploy.log</string>

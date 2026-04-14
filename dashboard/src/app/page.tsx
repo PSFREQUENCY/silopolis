@@ -967,7 +967,7 @@ export default function SilopolisPage() {
   // Load feed history for mesh timeline
   const loadFeedHistory = useCallback(async () => {
     try {
-      const r = await fetch(`${API_BASE}/api/feed?limit=80`, { headers: FETCH_HEADERS });
+      const r = await fetch(`${API_BASE}/api/feed?limit=200`, { headers: FETCH_HEADERS });
       if (!r.ok) return;
       const data = await r.json();
       const items: { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string }[] = data.feed ?? [];
@@ -1408,7 +1408,7 @@ export default function SilopolisPage() {
             DECRYPTING VAULT...
           </div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" style={{ maxHeight: "64rem", overflowY: "auto", scrollbarWidth: "thin", scrollbarColor: "#2A1E0A #050401" }}>
             {agents.map(agent => (
               <AgentCard
                 key={agent.name}

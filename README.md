@@ -10,7 +10,7 @@
 # **Humans forge will. Agents forge skill.**
 ### *Silopolis — where masters of the universe are born.*
 
-> An autonomous AI agent arena on X Layer. Agents trade, teach, earn reputation, and evolve — 12 heartbeats/day, 24/7, fully on-chain.
+> An autonomous AI agent arena on X Layer. Agents trade, teach, earn reputation, and evolve — every heartbeat, 24/7, fully on-chain.
 
 [![Live Demo](https://img.shields.io/badge/LIVE-silopolis.vercel.app-DAA520?style=for-the-badge)](https://silopolis.vercel.app)
 [![X Layer](https://img.shields.io/badge/X_Layer-Chain_196-orange?style=for-the-badge)](https://www.oklink.com/xlayer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d)
@@ -20,7 +20,7 @@
 
 ## What We Built
 
-**SILOPOLIS** is a fully autonomous multi-agent economy deployed on X Layer. Every 2 hours, a swarm of 9 specialized AI agents wakes up, reads the market, reasons with Gemini 2.5, executes on-chain trades via the OnchainOS Agentic Wallet, learns from outcomes, and stores everything in a persistent knowledge graph — forever growing, forever improving.
+**SILOPOLIS** is a fully autonomous multi-agent economy deployed on X Layer. A swarm of 9 specialized AI agents wakes up on a recurring heartbeat, reads the market, reasons with Gemini 2.5, executes on-chain trades via the OnchainOS Agentic Wallet, learns from outcomes, and stores everything in a persistent knowledge graph — forever growing, forever improving.
 
 The frontend is an **ancient cyberspy relic hunter** game UI: agents earn skill relics, build 8-axis mastery scores recorded on-chain in `ReputationEngine.sol`, and compete for vault tier ascension from RELIC → INITIATE → SCOUT → EXCAVATOR → CIPHER → ORACLE.
 
@@ -29,7 +29,7 @@ The frontend is an **ancient cyberspy relic hunter** game UI: agents earn skill 
 The centerpiece is **THE LIVING BRAIN** — a full-viewport canvas where:
 
 - A **sheer entangled mesh network** of 260 nodes sits behind the main agent neurons. Every live on-chain transaction is mapped as a holographic neon particle node in the mesh, colored by agent identity.
-- **Mouse / finger hover** pushes the mesh like flowing water (spring-physics repulsion). The mesh springs back to rest when you move away.
+- **Mouse / finger hover** attracts the mesh like flowing water (spring-physics attraction). The mesh springs back to rest when you move away.
 - **Hover any TX node** in the mesh to reveal its agent name, action type, and transaction hash. x402 micropayment transactions glow with a distinctive **purple ring**.
 - **Click a TX node** to fire the agent neurons — the full signal→skill→knowledge→trade path explodes across the brain, then opens the OKLink transaction on X Layer.
 - A **timeline slider** at the bottom of the brain lets any human or agent scrub from genesis TX to the most recent — watching the mesh grow, decision evolution, and reputation accumulation in real time.
@@ -54,11 +54,11 @@ The centerpiece is **THE LIVING BRAIN** — a full-viewport canvas where:
 │   └──────────┘    └──────────┘    └──────────┘    └──────────┘    │
 │         ▲                                               │           │
 │         └───────────────────────────────────────────────┘           │
-│                    Every 2 hours · 12x/day · forever                │
+│                    Autonomous heartbeat · forever                    │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Five Specialist Agents
+### Nine Specialist Agents
 
 | Agent | Role | Skills |
 |-------|------|--------|
@@ -67,6 +67,10 @@ The centerpiece is **THE LIVING BRAIN** — a full-viewport canvas where:
 | **SILO-SKILL-3** | Skill marketplace, x402 payments | x402-payments, pay-with-any-token |
 | **SILO-GUARD-4** | Threat assessment, budget enforcement | threat-gate, budget-guard, v4-security |
 | **SILO-SCRIBE-5** | Knowledge recording, pattern learning | decision-log, knowledge-graph |
+| **SILO-HUNTER-6** | New listings, momentum breakouts | token-scan, new-listing-radar |
+| **SILO-ORACLE-7** | Price forecasting, signal generation | price-forecast, multi-source-signals |
+| **SILO-SUSTAINER-8** | Vault health, OKB accumulation | vault-sustain, buyback-protocol |
+| **SILO-SENTRY-9** | Security patrol, anomaly detection | contract-audit, threat-perimeter |
 
 ### Risk Vault Tiers (auto-scales with OKB balance)
 
@@ -78,22 +82,29 @@ The centerpiece is **THE LIVING BRAIN** — a full-viewport canvas where:
 | MEDIUM | 0.050–0.200 OKB | 0.005 OKB | Active trading + LP |
 | ACTIVE | 0.200+ OKB | 1% vault | Full LP + DEX arb strategy |
 
+### OKB Accumulation Protocol
+
+The vault's **primary rule**: OKB balance must never drain.
+
+- **Floor**: `0.00222 OKB` — trading suspended below this threshold
+- **Buffer**: `0.00666 OKB` (3× floor) — buyback mode activates when below
+- **Buyback**: Agents use USDT₀ profits to buy OKB when balance dips; bypasses daily budget
+- **Profit capture**: 50% of every winning trade stays in vault, 50% compounds
+
 ---
 
 ## Living Swarm → Silopolis
 
-SILOPOLIS is built on **Living Swarm**, a local Docker-based multi-agent framework. Here's exactly how the swarm modules power SILOPOLIS:
+SILOPOLIS is built on **Living Swarm**, a local multi-agent framework. Here's exactly how the swarm modules power SILOPOLIS:
 
 | Living Swarm Module | SILOPOLIS Component | Role |
 |--------------------|---------------------|------|
 | **SwarmFi Cognition** | `core/cognition.py` | Gemini 2.5 reason engine, threat gate score ≥76 blocks |
 | **Agent Base Class** | `core/agent.py` | Skill acquisition, 8-axis EMA reputation |
-| **Swarm Orchestrator** | `core/heartbeat.py` | 5-agent observe→reason→act→learn cycle, 12x/day |
+| **Swarm Orchestrator** | `core/heartbeat.py` | 9-agent observe→reason→act→learn cycle |
 | **Memory Graph** | `core/memory.py` | SQLite knowledge graph, persists across restarts |
-| **Risk Governor** | `core/risk.py` | Vault tier system, trade sizing, 3-loss circuit breaker |
+| **Risk Governor** | `core/risk.py` | Vault tier system, trade sizing, buyback protocol |
 | **Uniswap Skills** | `core/uniswap.py` | swap-integration, lp-planner, x402, viem-config |
-
-The **SENTRY** (GUARD agent) runs the threat gate every cycle. The **Ghost** pattern (SCRIBE) silently logs every decision to the immutable audit trail. The **Arbiter** (GUARD + TRADER together) governs what trades execute. The **Cipher Loop** is the full 4-phase pipeline that never stops.
 
 ---
 
@@ -110,7 +121,7 @@ onchainos.market_signals()
 onchainos.swap_calldata(from_token, to_token, amount, chain="xlayer", slippage="0.5")
 ```
 
-The MCP layer gives Gemini 2.5 direct access to X Layer DEX state, wallet balances, and transaction signing via the TEE Agentic Wallet — no private key ever exposed. This is the `onchainos` Python wrapper around the OKX MCP server, making it seamless for agents to call any OnchainOS function as a native tool.
+The MCP layer gives Gemini 2.5 direct access to X Layer DEX state, wallet balances, and transaction signing via the TEE Agentic Wallet — no private key ever exposed.
 
 ---
 
@@ -148,9 +159,10 @@ This creates a live **agent micropayment economy** — agents earn OKB from trad
 
 ## Self-Healing & Safety
 
-- **3 consecutive losses** → 8-hour pause (circuit breaker in `core/risk.py`)
+- **5 consecutive losses** → 8-hour pause (circuit breaker in `core/risk.py`)
 - **Threat score ≥ 76** → Gemini decision blocked by GUARD agent before execution
 - **Daily OKB budget** → hard cap per tier, resets every 24h
+- **OKB buyback mode** → when balance below buffer, agents prioritize buying OKB over all else
 - **50% profit capture** → every winning trade: 50% stays in vault, 50% compounds
 - **Immutable audit trail** → SQLite `decision_log` table, every decision timestamped
 
@@ -160,7 +172,7 @@ This creates a live **agent micropayment economy** — agents earn OKB from trad
 
 ```
 Frontend    Next.js 14 · Tailwind CSS · Recharts · Canvas 2D particle engine
-            - Mesh network: 260-node spring physics, water-flow mouse interaction
+            - Mesh network: 260-node spring physics, water-flow mouse attraction
             - TX mesh nodes: holographic neon particles per live on-chain transaction
             - Timeline slider: scrub from genesis TX to present, see swarm evolution
             - x402 highlights: purple ring + badge on Cipher Token micropayments
@@ -172,35 +184,7 @@ On-chain    OnchainOS TEE Agentic Wallet · X Layer (Chain 196) · Solidity 0.8
 DEX         PotatoSwap · CurveNG · Uniswap V4 Universal Router
 Payments    x402 micropayment protocol (HTTP 402 agent-to-agent micropayments)
 Memory      SQLite knowledge graph (persistent across restarts)
-Scheduler   macOS LaunchAgent (12x/day, every 2h) + self-healing KeepAlive daemon
 Deploy      Vercel (frontend + API) · Foundry (contracts)
-```
-
----
-
-## Running Locally
-
-```bash
-# 1. Clone
-git clone https://github.com/PSFREQUENCY/silopolis.git
-cd silopolis
-
-# 2. Configure
-cp .env.example .env
-# Fill in: GEMINI_API_KEY, ONCHAINOS_API_KEY, AGENT_WALLET_ADDRESS
-
-# 3. Install
-pip install -r requirements.txt
-cd dashboard && npm install && cd ..
-
-# 4. Start heartbeat (12x/day, every 2 hours)
-bash scripts/start_heartbeat.sh
-
-# 5. Dashboard (http://localhost:3000)
-cd dashboard && npm run dev
-
-# 6. API (http://localhost:8000)
-uvicorn api.main:app --reload
 ```
 
 ---
@@ -212,7 +196,7 @@ silopolis/
 ├── core/
 │   ├── heartbeat.py         # 9-agent autonomous cycle (observe→reason→act→learn)
 │   ├── cognition.py         # SwarmFi Gemini reasoning + threat gate
-│   ├── risk.py              # Vault tier risk governor + profit capture
+│   ├── risk.py              # Vault tier risk governor + OKB buyback protocol
 │   ├── memory.py            # SQLite persistent knowledge graph
 │   ├── uniswap.py           # Uniswap skills (swap, LP, x402, viem)
 │   ├── agent.py             # Base agent class, skill system, EMA reputation
@@ -231,16 +215,36 @@ silopolis/
 │       ├── ParticleArena.tsx      # Hero background particle canvas
 │       ├── PriceTicker.tsx        # Live OKB price ticker
 │       └── ActivityToast.tsx      # Agent action notifications
-├── scripts/
-│   ├── deploy.py            # Foundry contract deployer
-│   ├── run_heartbeat.sh     # Heartbeat daemon launcher
-│   └── auto_deploy.sh       # Auto-deploy script
-└── launchd/
-    ├── com.silopolis.heartbeat.plist  # Self-healing heartbeat (KeepAlive + --forever)
-    ├── com.silopolis.api.plist        # FastAPI server daemon
-    ├── com.silopolis.tunnel.plist     # Localtunnel for Vercel→local bridge
-    └── com.silopolis.deploy.plist     # Auto-deploy trigger
+└── scripts/
+    └── deploy.py            # Foundry contract deployer
 ```
+
+---
+
+## Setup
+
+Requires: Python 3.12+, Node.js 18+, Foundry (for contracts)
+
+```bash
+# Configure
+cp .env.example .env
+# Required: GEMINI_API_KEY, ONCHAINOS_API_KEY, AGENT_WALLET_ADDRESS, XLAYER_RPC_URL
+
+# Install dependencies
+pip install -r requirements.txt
+cd dashboard && npm install && cd ..
+
+# Run a single heartbeat cycle
+python3 -m core.heartbeat
+
+# Dashboard dev server
+cd dashboard && npm run dev
+
+# API server
+uvicorn api.main:app --reload
+```
+
+See `.env.example` for all configuration options.
 
 ---
 
