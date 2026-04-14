@@ -2,16 +2,31 @@
 
 /**
  * SILOPOLIS — Neural Terrain
- * An addictive digital brain where signals clump into skills,
- * skills link to knowledge, knowledge fires trades.
- * Every connection is provable reasoning. Public proof of work.
- * Wired to /api/feed — cascades show real agent activity.
+ * Background mesh maps every live TX as a holographic neon particle node.
+ * Hover → water-flow; click TX node → agent path explosion → OKLink.
+ * Timeline prop filters visible TX nodes (timeline slider from page.tsx).
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const FETCH_HEADERS: HeadersInit = { "Bypass-Tunnel-Reminder": "true" };
+
+// ── Exported types ─────────────────────────────────────────────────────────────
+
+export interface TxHistoryItem {
+  ts: string;
+  agent: string;
+  action: string;
+  tx_hash: string;
+  color: string;
+  is_x402: boolean;
+}
+
+export interface NeuronArenaProps {
+  txHistory?: TxHistoryItem[];
+  timelineIdx?: number;
+}
 
 interface FeedItem {
   ts: string;
@@ -111,7 +126,6 @@ type NodeMap     = Record<string, { x: number; y: number }>;
 
 function rng(a: number, b: number) { return a + Math.random() * (b - a); }
 
-// Quadratic bezier midpoint control (adds curve to edges)
 function bezierMid(ax: number, ay: number, bx: number, by: number) {
   const mx = (ax + bx) / 2, my = (ay + by) / 2;
   const nx = -(by - ay), ny = bx - ax;
@@ -120,7 +134,6 @@ function bezierMid(ax: number, ay: number, bx: number, by: number) {
   return { cx: mx + (nx / len) * len * bend, cy: my + (ny / len) * len * bend };
 }
 
-// Point along quadratic bezier
 function bezierPoint(ax: number, ay: number, cx: number, cy: number, bx: number, by: number, t: number) {
   const mt = 1 - t;
   return {
@@ -165,18 +178,43 @@ interface ChainStep {
   extra: string;
 }
 
+interface RenderedTxNode {
+  x: number; y: number;
+  color: string;
+  tx_hash: string;
+  agent: string;
+  action: string;
+  txLink: string;
+  is_x402: boolean;
+  pulsePhase: number;
+}
 
-export default function NeuronArena() {
+export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [chainDisplay, setChainDisplay] = useState<{ steps: ChainStep[]; activeStep: number; color: string; txLink?: string; txHash?: string } | null>(null);
   const liveChainRef  = useRef<typeof CHAINS>([...CHAINS]);
-  // Ring shockwave events fired when a new agent action arrives
   const pulseQueueRef = useRef<{ x: number; y: number; color: string; label: string }[]>([]);
   const lastFeedTsRef = useRef<string>("");
-  // Recent verified TXs for the proof panel
   const [recentTxs, setRecentTxs] = useState<{ agent: string; action: string; txLink: string; txHash: string; ts: string }[]>([]);
-  // Mega-explode ref — triggered when user clicks a TX link
   const megaExplodeRef = useRef<{ color: string } | null>(null);
+
+  // Refs for prop values (read in canvas render loop without re-running useEffect)
+  const txHistoryRef  = useRef<TxHistoryItem[] | undefined>(txHistory);
+  const timelineIdxRef = useRef<number | undefined>(timelineIdx);
+
+  useEffect(() => {
+    txHistoryRef.current  = txHistory;
+    timelineIdxRef.current = timelineIdx;
+  }, [txHistory, timelineIdx]);
+
+  // TX node stable positions (keyed by tx_hash)
+  const txPositionMapRef = useRef<Map<string, { xf: number; yf: number; pulsePhase: number }>>(new Map());
+  // Current rendered tx nodes array (rebuilt each frame)
+  const txMeshNodesRef = useRef<RenderedTxNode[]>([]);
+  // Hovered tx node index
+  const hoveredTxIdxRef = useRef<number | null>(null);
+  // Mouse position in canvas space
+  const mousePosRef = useRef<{ x: number; y: number } | null>(null);
 
   const buildEdgeBeziers = useCallback((nodes: typeof NODES, W: number, H: number): { beziers: BezierMap; nodeMap: NodeMap } => {
     const beziers: BezierMap = {};
@@ -191,7 +229,7 @@ export default function NeuronArena() {
     return { beziers, nodeMap };
   }, []);
 
-  // ── Poll /api/feed and build live chains ─────────────────────────────────────
+  // ── Poll /api/feed ─────────────────────────────────────────────────────────
   useEffect(() => {
     const buildChainFromFeed = (item: FeedItem) => {
       const agentPath = AGENT_PATH[item.agent];
@@ -219,15 +257,11 @@ export default function NeuronArena() {
         const items: FeedItem[] = data.feed ?? [];
         if (!items.length) return;
 
-        // Rebuild chain pool from live feed items + static fallbacks
-        const liveChains = items
-          .map(buildChainFromFeed)
-          .filter(Boolean) as typeof CHAINS;
+        const liveChains = items.map(buildChainFromFeed).filter(Boolean) as typeof CHAINS;
         liveChainRef.current = liveChains.length >= 2
           ? [...liveChains, ...CHAINS.slice(0, 2)]
           : [...CHAINS];
 
-        // Collect recent verified TXs for the proof panel
         const txItems = items.filter(f => f.tx_hash && f.tx_hash !== "DRY_RUN" && f.tx_hash !== "");
         if (txItems.length > 0) {
           setRecentTxs(txItems.slice(0, 4).map(f => ({
@@ -239,7 +273,6 @@ export default function NeuronArena() {
           })));
         }
 
-        // Detect new events → enqueue pulse explosions
         const newest = items[0];
         if (newest && newest.ts !== lastFeedTsRef.current) {
           lastFeedTsRef.current = newest.ts;
@@ -250,28 +283,24 @@ export default function NeuronArena() {
             const txLink = newest.tx_hash && newest.tx_hash !== "DRY_RUN"
               ? `https://www.oklink.com/xlayer/tx/${newest.tx_hash}` : undefined;
             const txHash = newest.tx_hash && newest.tx_hash !== "DRY_RUN" ? newest.tx_hash : undefined;
-            // Queue pulse at each node in the path (staggered)
             agentPath.path.forEach((nodeId, idx) => {
               setTimeout(() => {
                 const node = NODES.find(n => n.id === nodeId);
                 if (node) {
                   pulseQueueRef.current.push({
-                    x: node.xp,
-                    y: node.yp,
-                    color: col,
+                    x: node.xp, y: node.yp, color: col,
                     label: idx === agentPath.path.length - 1 ? `${shortAgent} ◈ ${newest.action}` : "",
                   });
                 }
               }, idx * 280);
             });
-            // Update cascade overlay with tx info
             setTimeout(() => {
               setChainDisplay(prev => prev ? { ...prev, txLink, txHash } : null);
             }, agentPath.path.length * 280 + 100);
           }
         }
       } catch {
-        // Keep using static chains
+        // keep static chains
       }
     };
 
@@ -280,6 +309,7 @@ export default function NeuronArena() {
     return () => clearInterval(iv);
   }, []); // eslint-disable-line
 
+  // ── Canvas render loop ─────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -290,17 +320,9 @@ export default function NeuronArena() {
     let beziers: BezierMap = {};
     let nodeMap: NodeMap   = {};
 
-    // ── Micro-particles (2000 particles cycling through life/death) ────────────
+    // ── Micro-particles ────────────────────────────────────────────────────────
     const MICRO_COUNT = 1800;
-    interface Micro {
-      x: number; y: number;
-      vx: number; vy: number;
-      colorIdx: number;
-      alpha: number;
-      alphaDir: number; // +1 rising, -1 falling
-      size: number;
-      phase: number;
-    }
+    interface Micro { x: number; y: number; vx: number; vy: number; colorIdx: number; alpha: number; alphaDir: number; size: number; phase: number; }
     const micros: Micro[] = [];
 
     function spawnMicro(): Micro {
@@ -308,43 +330,44 @@ export default function NeuronArena() {
         x: Math.random() * W, y: Math.random() * H,
         vx: rng(-0.18, 0.18), vy: rng(-0.18, 0.18),
         colorIdx: Math.floor(Math.random() * MICRO_COLORS.length),
-        alpha: 0,
-        alphaDir: 1,
-        size: rng(0.4, 1.8),
-        phase: Math.random() * Math.PI * 2,
+        alpha: 0, alphaDir: 1, size: rng(0.4, 1.8), phase: Math.random() * Math.PI * 2,
       };
     }
 
     function initMicros() {
       micros.length = 0;
       for (let i = 0; i < MICRO_COUNT; i++) {
-        const m = spawnMicro();
-        m.alpha = Math.random() * 0.25;
-        micros.push(m);
+        const m = spawnMicro(); m.alpha = Math.random() * 0.25; micros.push(m);
       }
     }
 
-    // ── Cascade state ──────────────────────────────────────────────────────────
-    interface CascadeTrail { x: number; y: number; alpha: number; size: number }
-    interface Cascade {
-      chainIdx: number;
-      pathStep: number;   // current edge in path (path[pathStep] → path[pathStep+1])
-      t: number;
-      trail: CascadeTrail[];
-      color: string;
-      completed: boolean;
-      bursting: string | null; // nodeId that just triggered a burst
+    // ── Background mesh nodes ──────────────────────────────────────────────────
+    const MESH_COUNT = 260;
+    interface MeshNode { x: number; y: number; vx: number; vy: number; baseX: number; baseY: number; size: number; }
+    const meshNodes: MeshNode[] = [];
+
+    function spawnMeshNode(): MeshNode {
+      const x = rng(0.02, 0.98) * W;
+      const y = rng(0.02, 0.98) * H;
+      return { x, y, vx: 0, vy: 0, baseX: x, baseY: y, size: rng(0.6, 1.6) };
     }
+
+    function initMesh() {
+      meshNodes.length = 0;
+      for (let i = 0; i < MESH_COUNT; i++) meshNodes.push(spawnMeshNode());
+    }
+
+    // ── Cascade ────────────────────────────────────────────────────────────────
+    interface CascadeTrail { x: number; y: number; alpha: number; size: number; }
+    interface Cascade { chainIdx: number; pathStep: number; t: number; trail: CascadeTrail[]; color: string; completed: boolean; bursting: string | null; }
     let cascade: Cascade | null = null;
     let chainCursor = 0;
-    let nextCascadeFrame = 120; // start first cascade at frame 120
+    let nextCascadeFrame = 120;
 
-    // ── Shockwave rings (triggered by new feed events) ─────────────────────────
-    interface Shockwave { x: number; y: number; r: number; maxR: number; alpha: number; color: string; label: string }
+    // ── Shockwaves + bursts ────────────────────────────────────────────────────
+    interface Shockwave { x: number; y: number; r: number; maxR: number; alpha: number; color: string; label: string; }
     const shockwaves: Shockwave[] = [];
-
-    // ── Burst particles ────────────────────────────────────────────────────────
-    interface Burst { x: number; y: number; vx: number; vy: number; alpha: number; size: number; color: string }
+    interface Burst { x: number; y: number; vx: number; vy: number; alpha: number; size: number; color: string; }
     const bursts: Burst[] = [];
 
     function spawnBurst(x: number, y: number, color: string, count = 30) {
@@ -355,24 +378,51 @@ export default function NeuronArena() {
       }
     }
 
-    // ── Node activity (glow when cascade passes through) ──────────────────────
     const nodeActivity: Record<string, number> = {};
     NODES.forEach(n => { nodeActivity[n.id] = 0; });
 
-    // ── Resize ────────────────────────────────────────────────────────────────
+    // ── Resize ─────────────────────────────────────────────────────────────────
     function resize() {
       const parent = canvas.parentElement;
       if (!parent) return;
       W = canvas.width  = parent.clientWidth;
       H = canvas.height = parent.clientHeight;
       const built = buildEdgeBeziers(NODES, W, H);
-      beziers  = built.beziers;
-      nodeMap  = built.nodeMap;
+      beziers = built.beziers;
+      nodeMap = built.nodeMap;
       initMicros();
+      initMesh();
     }
     const ro = new ResizeObserver(resize);
     ro.observe(canvas.parentElement!);
     resize();
+
+    // ── Mouse events ───────────────────────────────────────────────────────────
+    function onMouseMove(e: MouseEvent) {
+      const rect = canvas.getBoundingClientRect();
+      mousePosRef.current = {
+        x: (e.clientX - rect.left) * (W / rect.width),
+        y: (e.clientY - rect.top)  * (H / rect.height),
+      };
+    }
+    function onMouseLeave() {
+      mousePosRef.current = null;
+      hoveredTxIdxRef.current = null;
+      canvas.style.cursor = "default";
+    }
+    function onClick(e: MouseEvent) {
+      const idx = hoveredTxIdxRef.current;
+      if (idx !== null && idx < txMeshNodesRef.current.length) {
+        const tn = txMeshNodesRef.current[idx];
+        if (tn) {
+          megaExplodeRef.current = { color: tn.color };
+          setTimeout(() => window.open(tn.txLink, "_blank", "noopener"), 420);
+        }
+      }
+    }
+    canvas.addEventListener("mousemove", onMouseMove);
+    canvas.addEventListener("mouseleave", onMouseLeave);
+    canvas.addEventListener("click", onClick);
 
     // ── Main render loop ───────────────────────────────────────────────────────
     let frame = 0;
@@ -382,50 +432,42 @@ export default function NeuronArena() {
       const ctx = canvas.getContext("2d")!;
       frame++;
 
-      // ── Mega-explode (triggered when user clicks a TX link) ───────────────────
+      // ── Mega-explode ─────────────────────────────────────────────────────────
       if (megaExplodeRef.current) {
         const { color } = megaExplodeRef.current;
         megaExplodeRef.current = null;
-        // Explode from all nodes simultaneously
         NODES.forEach(n => {
           const nx = n.xp * W, ny = n.yp * H;
           spawnBurst(nx, ny, n.color, 45);
           shockwaves.push({ x: nx, y: ny, r: 6, maxR: 120, alpha: 1.2, color: n.color, label: "" });
         });
-        // Kick all particles outward from center
         const cx = W / 2, cy = H / 2;
         micros.forEach(m => {
           const dx = m.x - cx, dy = m.y - cy;
           const dist = Math.sqrt(dx * dx + dy * dy) + 1;
-          m.vx += (dx / dist) * 7;
-          m.vy += (dy / dist) * 7;
+          m.vx += (dx / dist) * 7; m.vy += (dy / dist) * 7;
         });
         spawnBurst(cx, cy, color, 80);
       }
 
-      // ── Process pulse queue from live feed events ─────────────────────────────
+      // ── Process pulse queue ──────────────────────────────────────────────────
       while (pulseQueueRef.current.length > 0) {
         const p = pulseQueueRef.current.shift()!;
         const px = p.x * W, py = p.y * H;
-        // Shockwave ring
         shockwaves.push({ x: px, y: py, r: 8, maxR: 90, alpha: 1, color: p.color, label: p.label });
-        // Micro-particle velocity kick — all particles surge away from this point
         micros.forEach(m => {
           const dx = m.x - px, dy = m.y - py;
           const dist = Math.sqrt(dx * dx + dy * dy) + 1;
           const force = Math.max(0, 1 - dist / 180) * 4.0;
-          m.vx += (dx / dist) * force;
-          m.vy += (dy / dist) * force;
+          m.vx += (dx / dist) * force; m.vy += (dy / dist) * force;
         });
-        // Explosion burst at the node
         spawnBurst(px, py, p.color, p.label ? 60 : 25);
       }
 
-      // Background — deep black with very slight alpha trail for motion blur
+      // Background
       ctx.fillStyle = "rgba(5, 4, 2, 0.88)";
       ctx.fillRect(0, 0, W, H);
 
-      // Subtle radial from center (faint neon bloom)
       const cg = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.65);
       cg.addColorStop(0, "rgba(0,240,255,0.018)");
       cg.addColorStop(0.4, "rgba(139,92,246,0.012)");
@@ -433,20 +475,190 @@ export default function NeuronArena() {
       ctx.fillStyle = cg;
       ctx.fillRect(0, 0, W, H);
 
-      // ── 1. Micro-particle field ──────────────────────────────────────────────
+      // ─────────────────────────────────────────────────────────────────────────
+      // LAYER 0 — BACKGROUND MESH (behind everything)
+      // ─────────────────────────────────────────────────────────────────────────
+
+      const MESH_CONNECT_DIST = Math.min(W, H) * 0.13;
+      const mp = mousePosRef.current;
+
+      // Update mesh node physics
+      meshNodes.forEach(m => {
+        // Spring return to base
+        m.vx += (m.baseX - m.x) * 0.003;
+        m.vy += (m.baseY - m.y) * 0.003;
+        // Mouse repulsion (water-flow effect)
+        if (mp) {
+          const dx = m.x - mp.x, dy = m.y - mp.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 160 && dist > 0) {
+            const force = (1 - dist / 160) * 4.2;
+            m.vx += (dx / dist) * force;
+            m.vy += (dy / dist) * force;
+          }
+        }
+        // Dampen
+        m.vx *= 0.87;
+        m.vy *= 0.87;
+        m.x += m.vx;
+        m.y += m.vy;
+        // Clamp
+        m.x = Math.max(0, Math.min(W, m.x));
+        m.y = Math.max(0, Math.min(H, m.y));
+      });
+
+      // Draw mesh edges
+      ctx.lineWidth = 0.3;
+      for (let i = 0; i < meshNodes.length; i++) {
+        const a = meshNodes[i];
+        for (let j = i + 1; j < meshNodes.length; j++) {
+          const b = meshNodes[j];
+          const dx = a.x - b.x, dy = a.y - b.y;
+          const dist2 = dx * dx + dy * dy;
+          if (dist2 < MESH_CONNECT_DIST * MESH_CONNECT_DIST) {
+            const dist = Math.sqrt(dist2);
+            const alpha = (1 - dist / MESH_CONNECT_DIST) * 0.07;
+            ctx.strokeStyle = `rgba(180,134,11,${alpha})`;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Draw mesh nodes (tiny dim dots)
+      meshNodes.forEach(m => {
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = "rgba(180,134,11,1)";
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+
+      // ── Rebuild TX mesh nodes from prop ──────────────────────────────────────
+      const histItems = txHistoryRef.current ?? [];
+      const maxIdx = timelineIdxRef.current !== undefined ? timelineIdxRef.current : histItems.length - 1;
+      const visibleItems = histItems.slice(0, maxIdx + 1);
+
+      // Assign stable random positions to new tx_hashes
+      visibleItems.forEach(tx => {
+        if (!txPositionMapRef.current.has(tx.tx_hash)) {
+          txPositionMapRef.current.set(tx.tx_hash, {
+            xf: 0.06 + Math.random() * 0.88,
+            yf: 0.06 + Math.random() * 0.88,
+            pulsePhase: Math.random() * Math.PI * 2,
+          });
+        }
+      });
+
+      // Build rendered array
+      txMeshNodesRef.current = visibleItems.map(tx => {
+        const pos = txPositionMapRef.current.get(tx.tx_hash)!;
+        return {
+          x: pos.xf * W,
+          y: pos.yf * H,
+          color: tx.color,
+          tx_hash: tx.tx_hash,
+          agent: tx.agent,
+          action: tx.action,
+          txLink: `https://www.oklink.com/xlayer/tx/${tx.tx_hash}`,
+          is_x402: tx.is_x402,
+          pulsePhase: pos.pulsePhase,
+        };
+      });
+
+      // Check hover on TX nodes
+      let newHoveredIdx: number | null = null;
+      if (mp) {
+        let closestDist = 28; // px threshold
+        txMeshNodesRef.current.forEach((tn, i) => {
+          const dx = tn.x - mp.x, dy = tn.y - mp.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < closestDist) { closestDist = dist; newHoveredIdx = i; }
+        });
+      }
+      hoveredTxIdxRef.current = newHoveredIdx;
+      canvas.style.cursor = newHoveredIdx !== null ? "pointer" : "default";
+
+      // Draw TX mesh nodes (holographic neon particles)
+      const phaseTick = frame * 0.04;
+      txMeshNodesRef.current.forEach((tn, i) => {
+        const isHovered = i === newHoveredIdx;
+        const pulse = 1 + Math.sin(tn.pulsePhase + phaseTick) * 0.3;
+        const baseR = isHovered ? 7 : 3.5;
+        const r = baseR * pulse;
+
+        // Connect TX node to nearby mesh nodes
+        if (isHovered) {
+          meshNodes.forEach(m => {
+            const dx = m.x - tn.x, dy = m.y - tn.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < MESH_CONNECT_DIST * 0.8) {
+              const alpha = (1 - dist / (MESH_CONNECT_DIST * 0.8)) * 0.25;
+              ctx.strokeStyle = `${tn.color}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
+              ctx.lineWidth = 0.4;
+              ctx.beginPath();
+              ctx.moveTo(tn.x, tn.y);
+              ctx.lineTo(m.x, m.y);
+              ctx.stroke();
+            }
+          });
+        }
+
+        // Outer glow
+        const gAlpha = isHovered ? 0.55 : 0.2;
+        const gR = r * (isHovered ? 5 : 3.5);
+        const tg = ctx.createRadialGradient(tn.x, tn.y, 0, tn.x, tn.y, gR);
+        tg.addColorStop(0, `${tn.color}${Math.round(gAlpha * 255).toString(16).padStart(2, "0")}`);
+        tg.addColorStop(1, "transparent");
+        ctx.fillStyle = tg;
+        ctx.beginPath();
+        ctx.arc(tn.x, tn.y, gR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Core dot
+        ctx.globalAlpha = isHovered ? 1 : 0.65;
+        ctx.fillStyle = tn.color;
+        ctx.beginPath();
+        ctx.arc(tn.x, tn.y, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // x402 indicator — extra ring
+        if (tn.is_x402) {
+          ctx.globalAlpha = isHovered ? 0.9 : 0.35;
+          ctx.strokeStyle = "#C084FC";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(tn.x, tn.y, r * 2.2, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        ctx.globalAlpha = 1;
+
+        // Hover label
+        if (isHovered) {
+          const label = `${tn.agent.replace("SILO-", "")} · ${tn.action}${tn.is_x402 ? " · x402" : ""}`;
+          ctx.font = "bold 10px 'JetBrains Mono', monospace";
+          ctx.fillStyle = tn.color;
+          ctx.textAlign = "center";
+          ctx.fillText(label, tn.x, tn.y - r * 3 - 4);
+          ctx.font = "9px 'JetBrains Mono', monospace";
+          ctx.fillStyle = "rgba(218,165,32,0.7)";
+          ctx.fillText(tn.tx_hash.slice(0, 16) + "… ↗", tn.x, tn.y - r * 3 + 10);
+        }
+      });
+
+      // ── LAYER 1 — Micro-particle field ────────────────────────────────────────
       micros.forEach(m => {
-        // Dampen velocity back to baseline after pulse kick
-        m.vx *= 0.96;
-        m.vy *= 0.96;
-        // Add natural drift back if nearly stopped
+        m.vx *= 0.96; m.vy *= 0.96;
         if (Math.abs(m.vx) < 0.18) m.vx += (Math.random() - 0.5) * 0.04;
         if (Math.abs(m.vy) < 0.18) m.vy += (Math.random() - 0.5) * 0.04;
         m.x += m.vx; m.y += m.vy;
-        // Wrap at edges
         if (m.x < 0) m.x += W; if (m.x > W) m.x -= W;
         if (m.y < 0) m.y += H; if (m.y > H) m.y -= H;
 
-        // Pulse alpha
         m.phase += 0.008 + m.size * 0.002;
         m.alpha = 0.04 + Math.sin(m.phase) * 0.04 + Math.random() * 0.02;
 
@@ -459,7 +671,7 @@ export default function NeuronArena() {
       });
       ctx.globalAlpha = 1;
 
-      // ── 2. Edge mesh (thin static beziers between nodes) ───────────────────
+      // ── LAYER 2 — Edge mesh (main neuron edges) ───────────────────────────────
       ctx.lineWidth = 0.5;
       EDGES.forEach(([f, t]) => {
         const key = `${f}-${t}`;
@@ -476,17 +688,15 @@ export default function NeuronArena() {
         ctx.stroke();
       });
 
-      // ── 3. Node glow + core ─────────────────────────────────────────────────
+      // ── LAYER 3 — Node glow + core ────────────────────────────────────────────
       NODES.forEach(n => {
-        const nx = (n.xp * W), ny = (n.yp * H);
+        const nx = n.xp * W, ny = n.yp * H;
         const act = nodeActivity[n.id] ?? 0;
-        // Decay activity
         if (act > 0) nodeActivity[n.id] = Math.max(0, act - 0.012);
 
         const pulse = 1 + Math.sin(frame * 0.025 + NODES.indexOf(n) * 0.8) * 0.18;
         const baseR = (14 + act * 10) * pulse;
 
-        // Outer glow
         const glow = ctx.createRadialGradient(nx, ny, 0, nx, ny, baseR * 4.5);
         glow.addColorStop(0, `rgba(${n.rgb},${0.25 + act * 0.4})`);
         glow.addColorStop(0.35, `rgba(${n.rgb},${0.06 + act * 0.1})`);
@@ -496,7 +706,6 @@ export default function NeuronArena() {
         ctx.arc(nx, ny, baseR * 4.5, 0, Math.PI * 2);
         ctx.fill();
 
-        // Core
         ctx.beginPath();
         ctx.arc(nx, ny, baseR, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${n.rgb},${0.18 + act * 0.25})`;
@@ -505,14 +714,12 @@ export default function NeuronArena() {
         ctx.fill();
         ctx.stroke();
 
-        // Inner bright dot
         const dotR = baseR * 0.35;
         ctx.beginPath();
         ctx.arc(nx, ny, dotR, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${n.rgb},${0.5 + act * 0.5})`;
         ctx.fill();
 
-        // Hexagon ring
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2 - Math.PI / 6 + frame * 0.003;
@@ -524,34 +731,24 @@ export default function NeuronArena() {
         ctx.lineWidth = 0.7;
         ctx.stroke();
 
-        // Label
         ctx.font = "bold 9px 'JetBrains Mono', monospace";
         ctx.fillStyle = `rgba(${n.rgb},${0.55 + act * 0.45})`;
         ctx.textAlign = "center";
         ctx.fillText(n.label, nx, ny + baseR + 14);
       });
 
-      // ── 4. Auto-launch cascade ───────────────────────────────────────────────
+      // ── LAYER 4 — Auto-launch cascade ─────────────────────────────────────────
       nextCascadeFrame--;
       if (nextCascadeFrame <= 0 && !cascade) {
         const pool = liveChainRef.current;
         const ch = pool[chainCursor % pool.length];
         chainCursor++;
-        cascade = {
-          chainIdx: chainCursor - 1,
-          pathStep: 0,
-          t: 0,
-          trail: [],
-          color: ch.color,
-          completed: false,
-          bursting: null,
-        };
-        // Expose reasoning chain to React overlay
+        cascade = { chainIdx: chainCursor - 1, pathStep: 0, t: 0, trail: [], color: ch.color, completed: false, bursting: null };
         setChainDisplay({ steps: ch.steps, activeStep: 0, color: ch.color });
         nextCascadeFrame = 320 + Math.floor(Math.random() * 220);
       }
 
-      // ── 5. Cascade travel ───────────────────────────────────────────────────
+      // ── LAYER 5 — Cascade travel ──────────────────────────────────────────────
       if (cascade && !cascade.completed) {
         const pool = liveChainRef.current;
         const ch = pool[cascade.chainIdx % pool.length];
@@ -573,11 +770,9 @@ export default function NeuronArena() {
               ? bezierPoint(b.ax, b.ay, b.cx, b.cy, b.bx, b.by, Math.min(cascade.t, 1))
               : bezierPoint(b.bx, b.by, b.cx, b.cy, b.ax, b.ay, Math.min(cascade.t, 1));
 
-            // Trail
             cascade.trail.unshift({ x, y, alpha: 1, size: 4 });
             if (cascade.trail.length > 22) cascade.trail.pop();
 
-            // Draw trail
             cascade.trail.forEach((tr, i) => {
               tr.alpha -= 0.045;
               if (tr.alpha <= 0) return;
@@ -597,11 +792,9 @@ export default function NeuronArena() {
             });
             ctx.globalAlpha = 1;
 
-            // Arrived at next node
             if (cascade.t >= 1) {
               cascade.t = 0;
               cascade.trail = [];
-              // Burst at destination node
               const destNode = NODES.find(n => n.id === toId);
               if (destNode) {
                 const dx = destNode.xp * W, dy = destNode.yp * H;
@@ -609,7 +802,6 @@ export default function NeuronArena() {
                 nodeActivity[toId] = 1.0;
               }
               cascade.pathStep++;
-              // Update active step in overlay
               setChainDisplay(prev => prev ? { ...prev, activeStep: cascade!.pathStep } : null);
               if (cascade.pathStep >= path.length - 1) {
                 cascade.completed = true;
@@ -622,7 +814,7 @@ export default function NeuronArena() {
         }
       }
 
-      // ── 6. Burst particles ─────────────────────────────────────────────────
+      // ── LAYER 6 — Burst particles ─────────────────────────────────────────────
       for (let i = bursts.length - 1; i >= 0; i--) {
         const bp = bursts[i];
         bp.x += bp.vx; bp.y += bp.vy;
@@ -645,14 +837,13 @@ export default function NeuronArena() {
       }
       ctx.globalAlpha = 1;
 
-      // ── 7. Shockwave rings ────────────────────────────────────────────────────
+      // ── LAYER 7 — Shockwave rings ─────────────────────────────────────────────
       for (let i = shockwaves.length - 1; i >= 0; i--) {
         const sw = shockwaves[i];
         sw.r += (sw.maxR - sw.r) * 0.09 + 1.2;
         sw.alpha -= 0.022;
         if (sw.alpha <= 0) { shockwaves.splice(i, 1); continue; }
 
-        // Outer expanding ring
         ctx.globalAlpha = sw.alpha * 0.7;
         ctx.beginPath();
         ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
@@ -660,7 +851,6 @@ export default function NeuronArena() {
         ctx.lineWidth = 2.5;
         ctx.stroke();
 
-        // Inner ring (slightly smaller, faster)
         ctx.globalAlpha = sw.alpha * 0.35;
         ctx.beginPath();
         ctx.arc(sw.x, sw.y, sw.r * 0.65, 0, Math.PI * 2);
@@ -668,7 +858,6 @@ export default function NeuronArena() {
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Label at the explosion point (final node only)
         if (sw.label && sw.r < 45) {
           ctx.globalAlpha = sw.alpha * 1.2;
           ctx.font = "bold 10px 'JetBrains Mono', monospace";
@@ -688,37 +877,50 @@ export default function NeuronArena() {
       running = false;
       cancelAnimationFrame(animId);
       ro.disconnect();
+      canvas.removeEventListener("mousemove", onMouseMove);
+      canvas.removeEventListener("mouseleave", onMouseLeave);
+      canvas.removeEventListener("click", onClick);
     };
   }, [buildEdgeBeziers]);
 
-  const stepColors: Record<number, string> = {
-    0: "#00f0ff",
-    1: "#7c3aed",
-    2: "#DAA520",
-    3: "#22c55e",
-  };
+  const stepColors: Record<number, string> = { 0: "#00f0ff", 1: "#7c3aed", 2: "#DAA520", 3: "#22c55e" };
   const stepGlyphs = ["◈", "◊", "◇", "⬡"];
   const stepLabels = ["SIGNAL", "SKILL", "KNOWLEDGE", "OUTPUT"];
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* Canvas fills container */}
-      <canvas
-        ref={canvasRef}
-        style={{ display: "block", width: "100%", height: "100%" }}
-      />
+      <canvas ref={canvasRef} style={{ display: "block", width: "100%", height: "100%" }} />
 
       {/* Vignette */}
-      <div style={{
-        position: "absolute", inset: 0, pointerEvents: "none",
-        background: "radial-gradient(ellipse at 50% 40%, transparent 38%, rgba(5,4,2,0.85) 100%)",
-      }} />
-      <div style={{
-        position: "absolute", inset: "0 0 0 0", pointerEvents: "none",
-        background: "linear-gradient(to bottom, rgba(5,4,2,0.7) 0%, transparent 15%, transparent 82%, rgba(5,4,2,0.95) 100%)",
-      }} />
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse at 50% 40%, transparent 38%, rgba(5,4,2,0.85) 100%)" }} />
+      <div style={{ position: "absolute", inset: "0 0 0 0", pointerEvents: "none", background: "linear-gradient(to bottom, rgba(5,4,2,0.7) 0%, transparent 15%, transparent 82%, rgba(5,4,2,0.95) 100%)" }} />
 
-      {/* Reasoning chain overlay — appears when cascade fires */}
+      {/* Mesh TX count badge */}
+      {txMeshNodesRef.current.length > 0 && (
+        <div style={{
+          position: "absolute", top: 16, right: 16, zIndex: 15, pointerEvents: "none",
+          background: "rgba(5,4,2,0.8)", border: "1px solid rgba(124,58,237,0.3)",
+          padding: "4px 10px", fontFamily: "'JetBrains Mono', monospace",
+        }}>
+          <span style={{ fontSize: "0.55rem", color: "#7c3aed", letterSpacing: "0.2em" }}>
+            ◈ {txMeshNodesRef.current.length} TX IN MESH
+            {txMeshNodesRef.current.filter(t => t.is_x402).length > 0 && (
+              <span style={{ color: "#C084FC", marginLeft: 6 }}>
+                · {txMeshNodesRef.current.filter(t => t.is_x402).length} x402
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* Hover hint */}
+      <div style={{ position: "absolute", bottom: 72, inset: "auto 0 auto 0", zIndex: 15, pointerEvents: "none", textAlign: "center" }}>
+        <span style={{ fontSize: "0.52rem", color: "#2A1E0A", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.15em" }}>
+          hover mesh nodes · click tx → explode → on-chain
+        </span>
+      </div>
+
+      {/* Reasoning chain overlay */}
       {chainDisplay && (
         <div style={{
           position: "absolute", right: 28, top: "50%", transform: "translateY(-50%)",
@@ -739,10 +941,7 @@ export default function NeuronArena() {
                   <span style={{ fontSize: "0.65rem", color: col, textShadow: isActive ? `0 0 10px ${col}` : "none" }}>
                     {stepGlyphs[i]}
                   </span>
-                  <span style={{
-                    fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.15em",
-                    color: isActive ? col : "#4A3A22", textShadow: isActive ? `0 0 14px ${col}80` : "none",
-                  }}>
+                  <span style={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.15em", color: isActive ? col : "#4A3A22", textShadow: isActive ? `0 0 14px ${col}80` : "none" }}>
                     {stepLabels[i]} · {step.label}
                   </span>
                 </div>
@@ -760,24 +959,17 @@ export default function NeuronArena() {
               </div>
             );
           })}
-
-          {/* TX Verify button — explodes then navigates */}
           {chainDisplay.txLink && (
             <button
-              onClick={() => {
-                megaExplodeRef.current = { color: chainDisplay.color };
-                setTimeout(() => window.open(chainDisplay.txLink, "_blank", "noopener"), 420);
-              }}
+              onClick={() => { megaExplodeRef.current = { color: chainDisplay.color }; setTimeout(() => window.open(chainDisplay.txLink, "_blank", "noopener"), 420); }}
               style={{
                 marginTop: 14, width: "100%", cursor: "pointer",
-                background: `${chainDisplay.color}12`,
-                border: `1px solid ${chainDisplay.color}50`,
+                background: `${chainDisplay.color}12`, border: `1px solid ${chainDisplay.color}50`,
                 color: chainDisplay.color, padding: "7px 0",
                 fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
                 fontWeight: 700, letterSpacing: "0.2em",
                 textShadow: `0 0 10px ${chainDisplay.color}60`,
                 boxShadow: `0 0 16px ${chainDisplay.color}18`,
-                transition: "all 0.2s",
               }}
               title={chainDisplay.txHash}
             >
@@ -806,10 +998,7 @@ export default function NeuronArena() {
           {recentTxs.map((tx, i) => (
             <button
               key={i}
-              onClick={() => {
-                megaExplodeRef.current = { color: "#22c55e" };
-                setTimeout(() => window.open(tx.txLink, "_blank", "noopener"), 420);
-              }}
+              onClick={() => { megaExplodeRef.current = { color: "#22c55e" }; setTimeout(() => window.open(tx.txLink, "_blank", "noopener"), 420); }}
               style={{
                 display: "block", width: "100%", cursor: "pointer",
                 background: "transparent", border: "none",
@@ -819,19 +1008,13 @@ export default function NeuronArena() {
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: "0.6rem", color: "#22c55e" }}>⬡</span>
-                <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "#DAA520", letterSpacing: "0.1em" }}>
-                  {tx.agent}
-                </span>
+                <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "#DAA520", letterSpacing: "0.1em" }}>{tx.agent}</span>
                 <span style={{ fontSize: "0.58rem", color: "#4A3A22" }}>{tx.action}</span>
-                <span style={{ fontSize: "0.55rem", color: "#22c55e", marginLeft: "auto", letterSpacing: "0.05em" }}>
-                  {tx.txHash.slice(0, 10)}… ↗
-                </span>
+                <span style={{ fontSize: "0.55rem", color: "#22c55e", marginLeft: "auto", letterSpacing: "0.05em" }}>{tx.txHash.slice(0, 10)}… ↗</span>
               </div>
             </button>
           ))}
-          <div style={{ marginTop: 6, fontSize: "0.52rem", color: "#2A1E0A" }}>
-            click any TX → explode → OKLink
-          </div>
+          <div style={{ marginTop: 6, fontSize: "0.52rem", color: "#2A1E0A" }}>click any TX → explode → OKLink</div>
         </div>
       )}
     </div>

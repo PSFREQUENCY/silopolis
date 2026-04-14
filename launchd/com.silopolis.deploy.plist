@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SILOPOLIS — Auto Deploy to Vercel LaunchAgent
+  ==============================================
+  Runs auto_deploy.sh every 10 minutes.
+  • If dashboard/ has uncommitted changes: git commit + push to GitHub
+  • Always: vercel --prod --yes (fast with build cache if nothing changed)
+
+  RunAtLoad: true → deploy immediately on plist load (shows latest code right away)
+  StartInterval: 600 → check every 10 minutes
+
+  Logs:
+    tail -f /tmp/silopolis-deploy.log
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.silopolis.deploy</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/funmen/silopolis/scripts/auto_deploy.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/funmen/silopolis</string>
+
+    <!-- Deploy immediately on plist load -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Repeat every 10 minutes (600 seconds) -->
+    <key>StartInterval</key>
+    <integer>600</integer>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/silopolis-deploy.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/silopolis-deploy.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/funmen</string>
+    </dict>
+</dict>
+</plist>

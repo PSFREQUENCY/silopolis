@@ -2,60 +2,70 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  SILOPOLIS macOS LaunchAgent — 12 heartbeats/day (every 2 hours)
-  Active mode for 5-day hackathon sprint.
+  SILOPOLIS — Resilient Heartbeat LaunchAgent
+  ============================================
+  FIXED: KeepAlive + RunAtLoad so it starts ASAP and recovers from any crash.
 
-  Install:
+  • Uses --forever mode so the process self-loops at SILOPOLIS_HEARTBEAT_INTERVAL.
+  • KeepAlive: true  → launchd restarts within ThrottleInterval seconds on any exit.
+  • RunAtLoad: true  → fires immediately on plist load (boot, or manual launchctl load).
+  • ThrottleInterval: 15 → 15s cooldown between restarts (no restart storm).
+  • Removed StartCalendarInterval — the --forever loop owns the schedule now.
+
+  Install / reload (runs automatically via scripts/install.sh):
     cp launchd/com.silopolis.heartbeat.plist ~/Library/LaunchAgents/
-    launchctl load ~/Library/LaunchAgents/com.silopolis.heartbeat.plist
+    launchctl unload -w ~/Library/LaunchAgents/com.silopolis.heartbeat.plist 2>/dev/null || true
+    launchctl load  -w ~/Library/LaunchAgents/com.silopolis.heartbeat.plist
 
-  View logs:
+  Logs:
     tail -f /tmp/silopolis-heartbeat.log
+    tail -f /tmp/silopolis-heartbeat.err
 
-  Uninstall:
-    launchctl unload ~/Library/LaunchAgents/com.silopolis.heartbeat.plist
+  Force one cycle right now:
+    cd /Users/funmen/silopolis && python3 -m core.heartbeat
 -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
     <string>com.silopolis.heartbeat</string>
 
+    <!-- Wrapper script: uses Homebrew Python, cds to project root, runs --forever -->
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/python3</string>
-        <string>/Users/funmen/silopolis/core/heartbeat.py</string>
+        <string>/bin/bash</string>
+        <string>/Users/funmen/silopolis/scripts/run_heartbeat.sh</string>
     </array>
 
+    <!-- Project root required so `python3 -m core.heartbeat` resolves the core package -->
     <key>WorkingDirectory</key>
     <string>/Users/funmen/silopolis</string>
 
-    <!-- Fire every 2 hours: 00:00, 02:00, 04:00, 06:00, 08:00, 10:00,
-                             12:00, 14:00, 16:00, 18:00, 20:00, 22:00 -->
-    <key>StartCalendarInterval</key>
-    <array>
-        <dict><key>Hour</key><integer>0</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>6</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>14</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>16</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>18</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>20</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>22</integer><key>Minute</key><integer>0</integer></dict>
-    </array>
+    <!-- Restart the process whenever it exits (crash or clean) — the main resilience key -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Minimum seconds between restarts — prevents restart storm after repeated crashes -->
+    <key>ThrottleInterval</key>
+    <integer>15</integer>
+
+    <!-- Start immediately when this plist is loaded (on boot or after launchctl load) -->
+    <key>RunAtLoad</key>
+    <true/>
 
     <key>StandardOutPath</key>
     <string>/tmp/silopolis-heartbeat.log</string>
+
     <key>StandardErrorPath</key>
     <string>/tmp/silopolis-heartbeat.err</string>
 
-    <key>KeepAlive</key>
-    <false/>
-
-    <key>RunAtLoad</key>
-    <false/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/funmen</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
 </dict>
 </plist>

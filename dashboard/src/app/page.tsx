@@ -12,6 +12,7 @@ import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   ResponsiveContainer, Tooltip,
 } from "recharts";
+import type { TxHistoryItem } from "../components/NeuronArena";
 
 const HeartbeatTimer = dynamic(() => import("../components/HeartbeatTimer"), { ssr: false });
 const ParticleArena  = dynamic(() => import("../components/ParticleArena"),  { ssr: false });
@@ -21,6 +22,19 @@ const ActivityToast  = dynamic(() => import("../components/ActivityToast"),  { s
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const FETCH_HEADERS: HeadersInit = { "Bypass-Tunnel-Reminder": "true" };
+
+// Agent color map (mirrors NeuronArena AGENT_PATH)
+const AGENT_COLORS: Record<string, string> = {
+  "SILO-TRADER-1":    "#22c55e",
+  "SILO-ANALYST-2":   "#22d3ee",
+  "SILO-SKILL-3":     "#7c3aed",
+  "SILO-GUARD-4":     "#FBBF24",
+  "SILO-SCRIBE-5":    "#ec4899",
+  "SILO-HUNTER-6":    "#00f0ff",
+  "SILO-ORACLE-7":    "#38BDF8",
+  "SILO-SUSTAINER-8": "#a78bfa",
+  "SILO-SENTRY-9":    "#FB923C",
+};
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -605,7 +619,7 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
 
 // ─── Trade History Graph Feed ─────────────────────────────────────────────────
 
-type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string; txLink?: string; txHash?: string };
+type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string; txLink?: string; txHash?: string; isX402?: boolean };
 
 function actionColor(action: string): { color: string; icon: string; pulse?: boolean } {
   const map: Record<string, { color: string; icon: string; pulse?: boolean }> = {
@@ -650,7 +664,8 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
               const detail = item.reasoning
                 ? `${item.reasoning} · ${item.confidence}%`
                 : `OKB $${data.okb_price?.toFixed(2)} · ${item.confidence}%`;
-              return { time, action: item.action, agent: item.agent, detail, color, icon, txLink: item.tx_link, txHash: item.tx_hash };
+              const isX402 = item.agent === "SILO-SKILL-3" || (item.reasoning ?? "").toLowerCase().includes("x402");
+              return { time, action: item.action, agent: item.agent, detail, color, icon, txLink: item.tx_link, txHash: item.tx_hash, isX402 };
             });
             setFeed(rows);
           }
@@ -819,13 +834,15 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
           {feed.map((row, i) => {
             const isQueued = row.action === "QUEUED";
             const isSwap   = row.action === "SWAP";
+            const isX402   = row.isX402;
             return (
               <div
                 key={i}
                 className="flex items-start gap-3 py-2"
                 style={{
                   borderBottom: "1px solid #0F0C08",
-                  background: isQueued ? `${row.color}08` : undefined,
+                  background: isX402 ? "rgba(192,132,252,0.04)" : isQueued ? `${row.color}08` : undefined,
+                  boxShadow: isX402 ? "inset 0 0 12px rgba(192,132,252,0.06)" : undefined,
                 }}
               >
                 <span className="font-mono text-xs flex-shrink-0 w-12" style={{ color: "#3A2C16" }}>{row.time}</span>
@@ -847,7 +864,13 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
                 <span className="font-mono text-xs flex-shrink-0 hidden md:inline" style={{ color: "#4A3A22" }}>
                   {row.agent.replace("SILO-", "")}
                 </span>
-                <span className="font-mono text-xs flex-1 truncate" style={{ color: isQueued ? "#9A7040" : "#6B5C3A" }}>
+                {isX402 && (
+                  <span className="font-mono text-xs flex-shrink-0 px-1.5 py-0.5 tracking-wider"
+                    style={{ background: "rgba(192,132,252,0.15)", color: "#C084FC", border: "1px solid rgba(192,132,252,0.4)", fontWeight: 700 }}>
+                    x402 ⬟
+                  </span>
+                )}
+                <span className="font-mono text-xs flex-1 truncate" style={{ color: isQueued ? "#9A7040" : isX402 ? "#9A7AB8" : "#6B5C3A" }}>
                   {row.detail}
                 </span>
                 {isQueued && (
@@ -894,6 +917,8 @@ export default function SilopolisPage() {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [totalTx, setTotalTx] = useState(0);
   const [classified, setClassified] = useState(false); // flicker on load
+  const [feedHistory, setFeedHistory] = useState<TxHistoryItem[]>([]);
+  const [timelineIdx, setTimelineIdx] = useState<number>(0);
 
   // Real agent roster — mirrors actual SQLite data (83 cycles, 9 agents, 237 excavations)
   const DEMO_AGENTS: Agent[] = [
@@ -937,13 +962,41 @@ export default function SilopolisPage() {
     }
   }, []); // eslint-disable-line
 
+  // Load feed history for mesh timeline
+  const loadFeedHistory = useCallback(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/feed?limit=80`, { headers: FETCH_HEADERS });
+      if (!r.ok) return;
+      const data = await r.json();
+      const items: { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string }[] = data.feed ?? [];
+      // Reverse so oldest is index 0, newest is last
+      const txItems: TxHistoryItem[] = items
+        .filter(f => f.tx_hash && f.tx_hash !== "DRY_RUN" && f.tx_hash !== "")
+        .reverse()
+        .map(f => ({
+          ts: f.ts,
+          agent: f.agent,
+          action: f.action,
+          tx_hash: f.tx_hash!,
+          color: AGENT_COLORS[f.agent] ?? "#DAA520",
+          is_x402: f.agent === "SILO-SKILL-3" || (f.reasoning ?? "").toLowerCase().includes("x402"),
+        }));
+      setFeedHistory(txItems);
+      setTimelineIdx(txItems.length - 1); // start at most recent
+    } catch {
+      // keep empty
+    }
+  }, []); // eslint-disable-line
+
   useEffect(() => {
     refresh();
+    loadFeedHistory();
     // Classified flicker on mount
     setTimeout(() => setClassified(true), 300);
     const iv = setInterval(refresh, 30_000);
-    return () => clearInterval(iv);
-  }, [refresh]);
+    const iv2 = setInterval(loadFeedHistory, 60_000); // refresh feed history every minute
+    return () => { clearInterval(iv); clearInterval(iv2); };
+  }, [refresh, loadFeedHistory]);
 
   const triggerCycle = async () => {
     if (cycleRunning) return;
@@ -974,6 +1027,17 @@ export default function SilopolisPage() {
         ::-webkit-scrollbar-thumb { background: #B8860B40; }
         @keyframes flicker {
           0%,100% { opacity:1 } 50%{ opacity:0.85 } 75%{ opacity:0.95 }
+        }
+        input[type=range]::-webkit-slider-thumb {
+          -webkit-appearance: none; appearance: none;
+          width: 12px; height: 12px; border-radius: 0;
+          background: #DAA520; border: 1px solid #B8860B;
+          cursor: pointer; box-shadow: 0 0 8px #DAA52060;
+        }
+        input[type=range]::-moz-range-thumb {
+          width: 12px; height: 12px; border-radius: 0;
+          background: #DAA520; border: 1px solid #B8860B;
+          cursor: pointer; box-shadow: 0 0 8px #DAA52060;
         }
         @keyframes scandown {
           from { transform: translateY(-100%) } to { transform: translateY(100vh) }
@@ -1040,7 +1104,7 @@ export default function SilopolisPage() {
                 {totalTx} <span style={{ color: "#4A3A22" }}>EXCAVATIONS</span>
               </div>
               {/* Live heartbeat timer */}
-              <HeartbeatTimer apiBase={API_BASE} cycleIntervalSec={3600} />
+              <HeartbeatTimer apiBase={API_BASE} cycleIntervalSec={7200} />
 
               <button
                 onClick={triggerCycle}
@@ -1153,7 +1217,10 @@ export default function SilopolisPage() {
 
         {/* Canvas */}
         <div className="absolute inset-0">
-          <NeuronArena />
+          <NeuronArena
+            txHistory={feedHistory}
+            timelineIdx={timelineIdx}
+          />
         </div>
 
         {/* Top overlay — section label + headline */}
@@ -1176,6 +1243,48 @@ export default function SilopolisPage() {
             {" "}<span style={{ color: "#DAA520" }}>Provable on X Layer.</span>
           </p>
         </div>
+
+        {/* Timeline slider */}
+        {feedHistory.length > 1 && (
+          <div className="absolute z-20 inset-x-0 flex flex-col items-center" style={{ bottom: 68 }}>
+            <div className="px-6 py-3 backdrop-blur-sm w-full max-w-2xl mx-auto"
+              style={{ background: "rgba(5,4,2,0.88)", border: "1px solid rgba(218,165,32,0.12)" }}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-xs tracking-[0.2em]" style={{ color: "#B8860B" }}>◈ NEURAL TIMELINE</span>
+                <span className="font-mono text-xs" style={{ color: "#DAA520" }}>
+                  TX {timelineIdx + 1} / {feedHistory.length}
+                  {feedHistory[timelineIdx]?.is_x402 && (
+                    <span style={{ color: "#C084FC", marginLeft: 6 }}>· x402</span>
+                  )}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={feedHistory.length - 1}
+                value={timelineIdx}
+                onChange={e => setTimelineIdx(Number(e.target.value))}
+                className="w-full"
+                style={{
+                  appearance: "none", height: 3, borderRadius: 0,
+                  background: `linear-gradient(to right, #B8860B ${((timelineIdx / Math.max(1, feedHistory.length - 1)) * 100).toFixed(1)}%, #1A1208 0%)`,
+                  outline: "none", cursor: "pointer",
+                }}
+              />
+              <div className="flex justify-between mt-1.5">
+                <span className="font-mono text-xs" style={{ color: "#3A2C16" }}>
+                  GENESIS · {feedHistory[0]?.ts ? new Date(feedHistory[0].ts).toLocaleDateString() : ""}
+                </span>
+                <span className="font-mono text-xs" style={{ color: "#4A3A22" }}>
+                  {feedHistory[timelineIdx]?.agent?.replace("SILO-", "") ?? ""} · {feedHistory[timelineIdx]?.action ?? ""}
+                </span>
+                <span className="font-mono text-xs" style={{ color: "#3A2C16" }}>
+                  LATEST · {feedHistory[feedHistory.length - 1]?.ts ? new Date(feedHistory[feedHistory.length - 1].ts).toLocaleDateString() : ""}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Learning flow legend — bottom center */}
         <div className="absolute bottom-10 inset-x-0 z-10 pointer-events-none flex justify-center">
@@ -1238,7 +1347,7 @@ export default function SilopolisPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {[
               { label: "HUNTERS ACTIVE",    val: status?.agent_count ?? (agents.length || 9), suffix: "",   accent: true  },
-              { label: "CYCLES COMPLETED",  val: status?.cycle_count ?? 83,             suffix: "",   accent: false },
+              { label: "CYCLES COMPLETED",  val: status?.cycle_count ?? 0,              suffix: "",   accent: false },
               { label: "TOTAL EXCAVATIONS", val: totalTx,                              suffix: "",   accent: true  },
               { label: "VAULT BUDGET",      val: status?.global_budget_remaining_usd ?? 10, suffix: "$", decimals: 2, accent: false },
             ].map(item => (
@@ -1256,7 +1365,7 @@ export default function SilopolisPage() {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {/* VAULT RANKINGS — LEADERBOARD                                        */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      <section className="max-w-7xl mx-auto px-6 py-16">
+      <section id="vault-rankings" className="max-w-7xl mx-auto px-6 py-16">
         <div className="flex items-end justify-between mb-10">
           <div>
             <div className="text-xs tracking-[0.3em] mb-2" style={{ color: "#B8860B" }}>CLASSIFIED ARCHIVE</div>
@@ -1316,13 +1425,13 @@ export default function SilopolisPage() {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {/* LIVE CIPHER FEED + WALLET                                          */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      <section className="px-6 py-16 max-w-7xl mx-auto">
+      <section id="live-feed" className="px-6 py-16 max-w-7xl mx-auto">
         <div className="flex items-end justify-between mb-8">
           <div>
             <div className="text-xs tracking-[0.3em] mb-2" style={{ color: "#B8860B" }}>ON-CHAIN ACTIVITY</div>
             <h2 className="text-4xl font-black tracking-tight" style={{ color: "#DAA520" }}>LIVE FEED</h2>
             <p className="text-sm mt-2 font-mono" style={{ color: "#4A3A22" }}>
-              Every cycle captured · 12 heartbeats/day · immutable audit trail
+              Every cycle captured · 12 heartbeats/day · every 2h · immutable audit trail
             </p>
           </div>
           <a
@@ -1344,7 +1453,7 @@ export default function SilopolisPage() {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {/* RELIC CODEX — SKILL NODE MAP                                        */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      <section style={{ background: "#080604", borderTop: "1px solid #2A1E0A" }} className="px-6 py-16">
+      <section id="relic-codex" style={{ background: "#080604", borderTop: "1px solid #2A1E0A" }} className="px-6 py-16">
         <div className="max-w-7xl mx-auto">
           <div className="mb-10">
             <div className="text-xs tracking-[0.3em] mb-2" style={{ color: "#B8860B" }}>ARTIFACT REGISTRY</div>
@@ -1396,26 +1505,34 @@ export default function SilopolisPage() {
 
         <div className="flex flex-wrap justify-center items-center gap-2">
           {[
-            { label: "EARN OKB",          sub: "DEX trade on X Layer",      color: "#34D399" },
+            { label: "EARN OKB",          sub: "DEX trade on X Layer",      color: "#34D399", href: "https://potatoswap.xyz", external: true },
             { arrow: true },
-            { label: "PAY x402",          sub: "Acquire new relic",         color: "#C084FC" },
+            { label: "PAY x402",          sub: "Acquire new relic",         color: "#C084FC", href: "#relic-codex", external: false },
             { arrow: true },
-            { label: "PROFICIENCY ↑",     sub: "Stored on-chain",           color: "#FBBF24" },
+            { label: "PROFICIENCY ↑",     sub: "Stored on-chain",           color: "#FBBF24", href: "#vault-rankings", external: false },
             { arrow: true },
-            { label: "REPUTATION ↑",      sub: "8-axis EMA weighted",       color: "#F472B6" },
+            { label: "REPUTATION ↑",      sub: "8-axis EMA weighted",       color: "#F472B6", href: "#vault-rankings", external: false },
             { arrow: true },
-            { label: "BETTER TRADES",     sub: "Higher signal confidence",  color: "#60A5FA" },
+            { label: "BETTER TRADES",     sub: "Higher signal confidence",  color: "#60A5FA", href: "#live-feed", external: false },
             { arrow: true },
-            { label: "TEACH PEERS",       sub: "Collab score compounds",    color: "#FB923C" },
+            { label: "TEACH PEERS",       sub: "Collab score compounds",    color: "#FB923C", href: "#relic-codex", external: false },
           ].map((step, i) =>
             (step as any).arrow ? (
               <span key={i} className="font-mono text-lg" style={{ color: "#2A1E0A" }}>—→</span>
             ) : (
-              <div key={i} className="px-4 py-3 text-center my-2"
-                style={{ border: `1px solid ${(step as any).color}30`, background: `${(step as any).color}08` }}>
+              <a
+                key={i}
+                href={(step as any).href}
+                target={(step as any).external ? "_blank" : undefined}
+                rel={(step as any).external ? "noopener noreferrer" : undefined}
+                className="px-4 py-3 text-center my-2 block transition-all duration-200"
+                style={{ border: `1px solid ${(step as any).color}30`, background: `${(step as any).color}08`, textDecoration: "none", cursor: "pointer" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = `${(step as any).color}70`; (e.currentTarget as HTMLAnchorElement).style.background = `${(step as any).color}18`; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = `${(step as any).color}30`; (e.currentTarget as HTMLAnchorElement).style.background = `${(step as any).color}08`; }}
+              >
                 <div className="text-xs font-black tracking-[0.15em]" style={{ color: (step as any).color }}>{(step as any).label}</div>
                 <div className="text-xs mt-0.5" style={{ color: "#4A3A22" }}>{(step as any).sub}</div>
-              </div>
+              </a>
             )
           )}
         </div>
