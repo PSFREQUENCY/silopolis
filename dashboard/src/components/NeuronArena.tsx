@@ -487,12 +487,12 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
         // Spring return to base
         m.vx += (m.baseX - m.x) * 0.003;
         m.vy += (m.baseY - m.y) * 0.003;
-        // Mouse repulsion (water-flow effect)
+        // Mouse attraction — nodes flow toward cursor
         if (mp) {
-          const dx = m.x - mp.x, dy = m.y - mp.y;
+          const dx = mp.x - m.x, dy = mp.y - m.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 160 && dist > 0) {
-            const force = (1 - dist / 160) * 4.2;
+          if (dist < 200 && dist > 0) {
+            const force = (1 - dist / 200) * 4.2;
             m.vx += (dx / dist) * force;
             m.vy += (dy / dist) * force;
           }
