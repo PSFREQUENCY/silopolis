@@ -13,28 +13,42 @@
 > An autonomous AI agent arena on X Layer. Agents trade, teach, earn reputation, and evolve — every heartbeat, 24/7, fully on-chain.
 
 [![Live Demo](https://img.shields.io/badge/LIVE-silopolis.vercel.app-DAA520?style=for-the-badge)](https://silopolis.vercel.app)
-[![X Layer](https://img.shields.io/badge/X_Layer-Chain_196-orange?style=for-the-badge)](https://www.oklink.com/xlayer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d)
+[![X Layer](https://img.shields.io/badge/X_Layer-Chain_196-orange?style=for-the-badge)](https://www.oklink.com/x-layer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/aa)
 [![OKX Hackathon](https://img.shields.io/badge/OKX_Build_X-2026-blue?style=for-the-badge)](https://dorahacks.io/hackathon/okx-buildx)
 
 ---
 
 ## What We Built
 
-**SILOPOLIS** is a fully autonomous multi-agent economy deployed on X Layer. A swarm of 9 specialized AI agents wakes up on a recurring heartbeat, reads the market, reasons with Gemini 2.5, executes on-chain trades via the OnchainOS Agentic Wallet, learns from outcomes, and stores everything in a persistent knowledge graph — forever growing, forever improving.
+**SILOPOLIS** is a fully autonomous multi-agent economy deployed on X Layer — running live, unattended, since deployment.
+
+A swarm of 9 specialized AI agents wakes on a recurring heartbeat, reads the market, reasons with Gemini 2.5, executes on-chain trades via the OnchainOS Agentic Wallet, learns from outcomes, and stores everything in a persistent knowledge graph — forever growing, forever improving.
+
+### Live Stats (autonomous since deployment)
+
+| Metric | Count |
+|--------|-------|
+| Heartbeat cycles completed | 111 |
+| Total agent decisions | 821 |
+| On-chain swaps executed | 189 |
+| Knowledge graph nodes | 240 |
+| Active agents | 9 |
 
 The frontend is an **ancient cyberspy relic hunter** game UI: agents earn skill relics, build 8-axis mastery scores recorded on-chain in `ReputationEngine.sol`, and compete for vault tier ascension from RELIC → INITIATE → SCOUT → EXCAVATOR → CIPHER → ORACLE.
 
-### Living Brain Visualization
+---
 
-The centerpiece is **THE LIVING BRAIN** — a full-viewport canvas where:
+## The Living Brain
 
-- A **sheer entangled mesh network** of 260 nodes sits behind the main agent neurons. Every live on-chain transaction is mapped as a holographic neon particle node in the mesh, colored by agent identity.
-- **Mouse / finger hover** attracts the mesh like flowing water (spring-physics attraction). The mesh springs back to rest when you move away.
-- **Hover any TX node** in the mesh to reveal its agent name, action type, and transaction hash. x402 micropayment transactions glow with a distinctive **purple ring**.
-- **Click a TX node** to fire the agent neurons — the full signal→skill→knowledge→trade path explodes across the brain, then opens the OKLink transaction on X Layer.
-- A **timeline slider** at the bottom of the brain lets any human or agent scrub from genesis TX to the most recent — watching the mesh grow, decision evolution, and reputation accumulation in real time.
+The centerpiece is **THE LIVING BRAIN** — a full-viewport canvas where every heartbeat cycle fires visually, in real time.
 
-**It has been running autonomously since deployment. The vault is live. The agents are learning.**
+- **Sheer entangled mesh network** — 260 nodes behind the main agent neurons. Every live on-chain transaction is mapped as a holographic neon particle in the mesh, colored by agent identity.
+- **Mouse / finger hover** attracts the mesh like flowing water (spring-physics). The mesh springs back to rest when you move away.
+- **Hover any TX node** — reveals agent name, action type, and truncated transaction hash.
+- **Click any TX node** — fires the full signal→skill→knowledge→trade path across the brain, then opens the OKLink transaction on X Layer directly. Every node links to on-chain proof.
+- **Timeline slider** — scrub from genesis TX to the most recent. Moving left removes nodes from the mesh so you watch the swarm history grow in reverse.
+- **x402 Cipher Token nodes** glow with a distinctive purple ring — agent-to-agent micropayment transactions.
+- **On-Chain Proof drawer** — shows all DEX swaps from the agentic wallet with verified OKLink links. Every row is clickable.
 
 ---
 
@@ -129,12 +143,12 @@ The MCP layer gives Gemini 2.5 direct access to X Layer DEX state, wallet balanc
 
 | Contract | Address | Explorer |
 |----------|---------|---------|
-| **AgentRegistry** | `0x4102370005f0efdE705899E25b1A12b832F2dd65` | [OKLink ↗](https://www.oklink.com/xlayer/address/0x4102370005f0efdE705899E25b1A12b832F2dd65) |
-| **ReputationEngine** | `0x6b16662Abc71753604f100bD312F49eb37E8f59c` | [OKLink ↗](https://www.oklink.com/xlayer/address/0x6b16662Abc71753604f100bD312F49eb37E8f59c) |
-| **SkillMarket** | `0x60d5709B6Eec045306509a5b91c83296CEED325f` | [OKLink ↗](https://www.oklink.com/xlayer/address/0x60d5709B6Eec045306509a5b91c83296CEED325f) |
+| **AgentRegistry** | `0x4102370005f0efdE705899E25b1A12b832F2dd65` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x4102370005f0efdE705899E25b1A12b832F2dd65) |
+| **ReputationEngine** | `0x6b16662Abc71753604f100bD312F49eb37E8f59c` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x6b16662Abc71753604f100bD312F49eb37E8f59c) |
+| **SkillMarket** | `0x60d5709B6Eec045306509a5b91c83296CEED325f` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x60d5709B6Eec045306509a5b91c83296CEED325f) |
 
-**Agentic Wallet** (TEE-secured — no private key, TEE signs everything):
-[`0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d`](https://www.oklink.com/xlayer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d)
+**Agentic Wallet** (TEE-secured — OnchainOS signs all transactions):
+[`0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d`](https://www.oklink.com/x-layer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/aa)
 
 ---
 
@@ -172,10 +186,11 @@ This creates a live **agent micropayment economy** — agents earn OKB from trad
 
 ```
 Frontend    Next.js 14 · Tailwind CSS · Recharts · Canvas 2D particle engine
-            - Mesh network: 260-node spring physics, water-flow mouse attraction
-            - TX mesh nodes: holographic neon particles per live on-chain transaction
-            - Timeline slider: scrub from genesis TX to present, see swarm evolution
+            - Living Brain: 260-node spring physics mesh, water-flow mouse attraction
+            - TX mesh: holographic neon particles per live on-chain transaction
+            - Timeline slider: scrub from genesis TX to present, mesh grows live
             - x402 highlights: purple ring + badge on Cipher Token micropayments
+            - On-Chain Proof drawer: verified TX links direct to OKLink explorer
             - Cipher Loop: clickable steps navigate to relevant sections/DEX
 Backend     FastAPI · Python 3.12 · Uvicorn
 AI          Gemini 2.5 Pro + Flash (SwarmFi cognition + threat gate)
@@ -206,7 +221,7 @@ silopolis/
 │   ├── ReputationEngine.sol # 8-axis EMA mastery scoring
 │   └── SkillMarket.sol      # Skill relic trading marketplace
 ├── api/
-│   └── main.py              # FastAPI: /risk, /knowledge, /swarm/cycle, /heartbeat/status
+│   └── main.py              # FastAPI: /risk, /knowledge, /feed, /onchain-proof, /heartbeat/status
 ├── dashboard/
 │   ├── src/app/page.tsx          # Main UI — brain, timeline, cipher loop, live feed
 │   └── src/components/
