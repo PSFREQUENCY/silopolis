@@ -7,12 +7,8 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/opt/homebrew/bin/npx</string>
-        <string>localtunnel</string>
-        <string>--port</string>
-        <string>8000</string>
-        <string>--subdomain</string>
-        <string>silopolis-api</string>
+        <string>/bin/bash</string>
+        <string>/Users/funmen/silopolis/scripts/start_tunnel.sh</string>
     </array>
 
     <key>RunAtLoad</key>
