@@ -168,11 +168,15 @@ interface ChainStep {
 
 export default function NeuronArena() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [chainDisplay, setChainDisplay] = useState<{ steps: ChainStep[]; activeStep: number; color: string } | null>(null);
+  const [chainDisplay, setChainDisplay] = useState<{ steps: ChainStep[]; activeStep: number; color: string; txLink?: string; txHash?: string } | null>(null);
   const liveChainRef  = useRef<typeof CHAINS>([...CHAINS]);
   // Ring shockwave events fired when a new agent action arrives
   const pulseQueueRef = useRef<{ x: number; y: number; color: string; label: string }[]>([]);
   const lastFeedTsRef = useRef<string>("");
+  // Recent verified TXs for the proof panel
+  const [recentTxs, setRecentTxs] = useState<{ agent: string; action: string; txLink: string; txHash: string; ts: string }[]>([]);
+  // Mega-explode ref — triggered when user clicks a TX link
+  const megaExplodeRef = useRef<{ color: string } | null>(null);
 
   const buildEdgeBeziers = useCallback((nodes: typeof NODES, W: number, H: number): { beziers: BezierMap; nodeMap: NodeMap } => {
     const beziers: BezierMap = {};
@@ -223,6 +227,18 @@ export default function NeuronArena() {
           ? [...liveChains, ...CHAINS.slice(0, 2)]
           : [...CHAINS];
 
+        // Collect recent verified TXs for the proof panel
+        const txItems = items.filter(f => f.tx_hash && f.tx_hash !== "DRY_RUN" && f.tx_hash !== "");
+        if (txItems.length > 0) {
+          setRecentTxs(txItems.slice(0, 4).map(f => ({
+            agent: f.agent.replace("SILO-", ""),
+            action: f.action,
+            txLink: `https://www.oklink.com/xlayer/tx/${f.tx_hash}`,
+            txHash: f.tx_hash!,
+            ts: f.ts,
+          })));
+        }
+
         // Detect new events → enqueue pulse explosions
         const newest = items[0];
         if (newest && newest.ts !== lastFeedTsRef.current) {
@@ -231,20 +247,27 @@ export default function NeuronArena() {
           if (agentPath) {
             const col = agentPath.color;
             const shortAgent = newest.agent.replace("SILO-", "");
+            const txLink = newest.tx_hash && newest.tx_hash !== "DRY_RUN"
+              ? `https://www.oklink.com/xlayer/tx/${newest.tx_hash}` : undefined;
+            const txHash = newest.tx_hash && newest.tx_hash !== "DRY_RUN" ? newest.tx_hash : undefined;
             // Queue pulse at each node in the path (staggered)
-            agentPath.path.forEach((nodeId, i) => {
+            agentPath.path.forEach((nodeId, idx) => {
               setTimeout(() => {
                 const node = NODES.find(n => n.id === nodeId);
                 if (node) {
                   pulseQueueRef.current.push({
-                    x: node.xp,  // fractional — resolved to px in canvas loop
+                    x: node.xp,
                     y: node.yp,
                     color: col,
-                    label: i === agentPath.path.length - 1 ? `${shortAgent} ◈ ${newest.action}` : "",
+                    label: idx === agentPath.path.length - 1 ? `${shortAgent} ◈ ${newest.action}` : "",
                   });
                 }
-              }, i * 280);
+              }, idx * 280);
             });
+            // Update cascade overlay with tx info
+            setTimeout(() => {
+              setChainDisplay(prev => prev ? { ...prev, txLink, txHash } : null);
+            }, agentPath.path.length * 280 + 100);
           }
         }
       } catch {
@@ -358,6 +381,27 @@ export default function NeuronArena() {
       if (!running) return;
       const ctx = canvas.getContext("2d")!;
       frame++;
+
+      // ── Mega-explode (triggered when user clicks a TX link) ───────────────────
+      if (megaExplodeRef.current) {
+        const { color } = megaExplodeRef.current;
+        megaExplodeRef.current = null;
+        // Explode from all nodes simultaneously
+        NODES.forEach(n => {
+          const nx = n.xp * W, ny = n.yp * H;
+          spawnBurst(nx, ny, n.color, 45);
+          shockwaves.push({ x: nx, y: ny, r: 6, maxR: 120, alpha: 1.2, color: n.color, label: "" });
+        });
+        // Kick all particles outward from center
+        const cx = W / 2, cy = H / 2;
+        micros.forEach(m => {
+          const dx = m.x - cx, dy = m.y - cy;
+          const dist = Math.sqrt(dx * dx + dy * dy) + 1;
+          m.vx += (dx / dist) * 7;
+          m.vy += (dy / dist) * 7;
+        });
+        spawnBurst(cx, cy, color, 80);
+      }
 
       // ── Process pulse queue from live feed events ─────────────────────────────
       while (pulseQueueRef.current.length > 0) {
@@ -674,19 +718,12 @@ export default function NeuronArena() {
         background: "linear-gradient(to bottom, rgba(5,4,2,0.7) 0%, transparent 15%, transparent 82%, rgba(5,4,2,0.95) 100%)",
       }} />
 
-      {/* Reasoning chain overlay — appears when cascade is active */}
+      {/* Reasoning chain overlay — appears when cascade fires */}
       {chainDisplay && (
         <div style={{
-          position: "absolute",
-          right: 28,
-          top: "50%",
-          transform: "translateY(-50%)",
-          width: 280,
-          background: "rgba(5,4,2,0.88)",
-          border: "1px solid rgba(218,165,32,0.18)",
-          backdropFilter: "blur(12px)",
-          padding: "16px",
-          zIndex: 20,
+          position: "absolute", right: 28, top: "50%", transform: "translateY(-50%)",
+          width: 272, background: "rgba(5,4,2,0.92)", border: "1px solid rgba(218,165,32,0.18)",
+          backdropFilter: "blur(12px)", padding: "16px", zIndex: 20,
           fontFamily: "'JetBrains Mono', monospace",
         }}>
           <div style={{ fontSize: "0.6rem", letterSpacing: "0.25em", color: "#4A3A22", marginBottom: 14 }}>
@@ -698,55 +735,105 @@ export default function NeuronArena() {
             const col = stepColors[i] ?? "#6B5C3A";
             return (
               <div key={i} style={{ marginBottom: 10, opacity: isPast ? 0.45 : isActive ? 1 : 0.25 }}>
-                {/* Step header */}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <span style={{
-                    fontSize: "0.65rem", color: col,
-                    textShadow: isActive ? `0 0 10px ${col}` : "none",
-                  }}>
+                  <span style={{ fontSize: "0.65rem", color: col, textShadow: isActive ? `0 0 10px ${col}` : "none" }}>
                     {stepGlyphs[i]}
                   </span>
                   <span style={{
                     fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.15em",
-                    color: isActive ? col : "#4A3A22",
-                    textShadow: isActive ? `0 0 14px ${col}80` : "none",
+                    color: isActive ? col : "#4A3A22", textShadow: isActive ? `0 0 14px ${col}80` : "none",
                   }}>
                     {stepLabels[i]} · {step.label}
                   </span>
                 </div>
-                {/* Detail */}
                 <div style={{ paddingLeft: 18, fontSize: "0.65rem", color: isActive ? "#9A8060" : "#3A2C16", lineHeight: 1.5 }}>
                   {step.detail}
                 </div>
-                {/* Extra */}
                 {isActive && (
                   <div style={{ paddingLeft: 18, fontSize: "0.6rem", color: col, opacity: 0.7, marginTop: 2 }}>
                     {step.extra}
                   </div>
                 )}
-                {/* Connector arrow */}
                 {i < chainDisplay.steps.length - 1 && (
                   <div style={{ paddingLeft: 14, fontSize: "0.65rem", color: "#2A1E0A", marginTop: 4 }}>↓</div>
                 )}
               </div>
             );
           })}
+
+          {/* TX Verify button — explodes then navigates */}
+          {chainDisplay.txLink && (
+            <button
+              onClick={() => {
+                megaExplodeRef.current = { color: chainDisplay.color };
+                setTimeout(() => window.open(chainDisplay.txLink, "_blank", "noopener"), 420);
+              }}
+              style={{
+                marginTop: 14, width: "100%", cursor: "pointer",
+                background: `${chainDisplay.color}12`,
+                border: `1px solid ${chainDisplay.color}50`,
+                color: chainDisplay.color, padding: "7px 0",
+                fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
+                fontWeight: 700, letterSpacing: "0.2em",
+                textShadow: `0 0 10px ${chainDisplay.color}60`,
+                boxShadow: `0 0 16px ${chainDisplay.color}18`,
+                transition: "all 0.2s",
+              }}
+              title={chainDisplay.txHash}
+            >
+              ⬡ VERIFY ON-CHAIN ↗
+            </button>
+          )}
+          {chainDisplay.txHash && (
+            <div style={{ marginTop: 6, fontSize: "0.52rem", color: "#3A2C16", wordBreak: "break-all" as const }}>
+              {chainDisplay.txHash.slice(0, 20)}…
+            </div>
+          )}
         </div>
       )}
 
-      {/* Bottom-left: live stats */}
-      <div style={{
-        position: "absolute", bottom: 32, left: 28, zIndex: 20,
-        fontFamily: "'JetBrains Mono', monospace",
-        display: "flex", gap: 20,
-      }}>
-        {NODES.slice(0, 5).map(n => (
-          <div key={n.id} style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "1rem", color: n.color }}>{n.glyph}</div>
-            <div style={{ fontSize: "0.55rem", color: "#3A2C16", marginTop: 2, letterSpacing: "0.1em" }}>{n.label.split(" ")[0]}</div>
+      {/* Bottom-left: verified TX proof panel */}
+      {recentTxs.length > 0 && (
+        <div style={{
+          position: "absolute", bottom: 28, left: 20, zIndex: 20,
+          fontFamily: "'JetBrains Mono', monospace",
+          background: "rgba(5,4,2,0.88)", border: "1px solid rgba(34,197,94,0.15)",
+          backdropFilter: "blur(12px)", padding: "10px 14px", maxWidth: 300,
+        }}>
+          <div style={{ fontSize: "0.55rem", letterSpacing: "0.25em", color: "#22c55e", marginBottom: 8 }}>
+            ⬡ VERIFIED ON-CHAIN TRADES
           </div>
-        ))}
-      </div>
+          {recentTxs.map((tx, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                megaExplodeRef.current = { color: "#22c55e" };
+                setTimeout(() => window.open(tx.txLink, "_blank", "noopener"), 420);
+              }}
+              style={{
+                display: "block", width: "100%", cursor: "pointer",
+                background: "transparent", border: "none",
+                borderBottom: i < recentTxs.length - 1 ? "1px solid #1A1208" : "none",
+                padding: "5px 0", textAlign: "left" as const,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: "0.6rem", color: "#22c55e" }}>⬡</span>
+                <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "#DAA520", letterSpacing: "0.1em" }}>
+                  {tx.agent}
+                </span>
+                <span style={{ fontSize: "0.58rem", color: "#4A3A22" }}>{tx.action}</span>
+                <span style={{ fontSize: "0.55rem", color: "#22c55e", marginLeft: "auto", letterSpacing: "0.05em" }}>
+                  {tx.txHash.slice(0, 10)}… ↗
+                </span>
+              </div>
+            </button>
+          ))}
+          <div style={{ marginTop: 6, fontSize: "0.52rem", color: "#2A1E0A" }}>
+            click any TX → explode → OKLink
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -21,6 +21,7 @@ interface Toast {
   title: string;
   detail: string;
   timestamp: number;
+  txLink?: string;
 }
 
 const TYPE_CONFIG: Record<ToastType, { color: string; glyph: string; bg: string }> = {
@@ -92,6 +93,8 @@ export default function ActivityToast() {
       ? `${item.reasoning.slice(0, 90)}${item.reasoning.length > 90 ? "…" : ""}`
       : `${item.action} · confidence ${item.confidence}%${item.tx_hash ? ` · ${item.tx_hash.slice(0, 10)}…` : ""}`;
 
+    const txLink = item.tx_hash && item.tx_hash !== "DRY_RUN" && item.tx_hash !== ""
+      ? `https://www.oklink.com/xlayer/tx/${item.tx_hash}` : undefined;
     setToasts(prev => [...prev.slice(-3), {
       id,
       type,
@@ -99,6 +102,7 @@ export default function ActivityToast() {
       title: actionTitle(item.action, shortAgent),
       detail,
       timestamp: Date.now(),
+      txLink,
     }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 6200);
   }, []);
@@ -211,6 +215,25 @@ export default function ActivityToast() {
             <div style={{ fontSize: "0.62rem", color: "#4A3A22", lineHeight: 1.45 }}>
               {toast.detail}
             </div>
+
+            {/* TX verify link — only shown for real on-chain trades */}
+            {toast.txLink && (
+              <a
+                href={toast.txLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  marginTop: 6, pointerEvents: "auto",
+                  fontSize: "0.58rem", fontWeight: 700, letterSpacing: "0.15em",
+                  color: "#22c55e", border: "1px solid #22c55e30",
+                  background: "rgba(34,197,94,0.07)", padding: "2px 8px",
+                  textDecoration: "none",
+                }}
+              >
+                ⬡ VERIFY ON-CHAIN ↗
+              </a>
+            )}
 
             {/* Drain timer */}
             <div style={{ marginTop: 8, height: 2, background: "#1A1208", borderRadius: 1, overflow: "hidden" }}>

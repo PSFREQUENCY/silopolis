@@ -573,6 +573,11 @@ def cipher_feed(limit: int = 20):
             if not tag or tag == "STANDBY":
                 tag = AGENT_IDLE_LABEL.get(name, "ANALYZING")
 
+            # Non-trading agents should never show SWAP/LP/QUEUED — use their role label
+            TRADING_AGENTS = {"SILO-TRADER-1", "SILO-HUNTER-6", "SILO-ANALYST-2"}
+            if tag in ("SWAP", "LP", "QUEUED") and name not in TRADING_AGENTS:
+                tag = AGENT_IDLE_LABEL.get(name, "ANALYZING")
+
             # For queued entries, pull reasoning from the outcome JSON if available
             if not reasoning and outcome == "queued":
                 try:
