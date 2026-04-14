@@ -416,8 +416,11 @@ def cipher_feed(limit: int = 20):
                         THEN CAST(json_extract(decision, '$.confidence') AS INTEGER)
                         ELSE 50 END as confidence,
                    CASE WHEN json_valid(decision)
-                        THEN substr(json_extract(decision, '$.reasoning'), 1, 100)
-                        ELSE '' END as reasoning
+                        THEN substr(json_extract(decision, '$.reasoning'), 1, 120)
+                        ELSE '' END as reasoning,
+                   CASE WHEN json_valid(decision)
+                        THEN json_extract(decision, '$.params.tx_hash')
+                        ELSE NULL END as tx_hash
             FROM decision_log
             ORDER BY timestamp DESC
             LIMIT ?
@@ -432,37 +435,75 @@ def cipher_feed(limit: int = 20):
         conn.close()
 
         import datetime
-        label_map = {
-            "executed_swap": "SWAP",
-            "get_quote": "QUOTE",
-            "observe": "OBSERVE",
-            "skill_sync": "LEARN",
-            "wait": "WAIT",
-            "risk_hold": "HOLD",
-            "error": "ERR",
+
+        # Per-action display labels
+        ACTION_LABELS = {
+            "executed_swap":  "SWAP",
+            "simulated_swap": "SWAP",
+            "swap":           "SWAP",
+            "lp_planned":     "LP",
+            "lp":             "LP",
+            "skill_synced":   "DEPLOYING",
+            "skill_sync":     "DEPLOYING",
+            "deploy":         "DEPLOYING",
+            "get_quote":      "SCANNING",
+            "scan":           "SCANNING",
+            "analyze":        "ANALYZING",
+            "forecast":       "FORECASTING",
+            "research":       "RESEARCHING",
+            "archive":        "ARCHIVING",
+            "monitor":        "MONITORING",
+            "patrol":         "PATROLLING",
+            "observe":        "ANALYZING",
+            "risk_hold":      "GUARDING",
+            "blocked":        "GUARDING",
+            "error":          "ERR",
+            "wait":           "STANDBY",
         }
+
+        # When an agent is idle, use role-specific language
+        AGENT_IDLE_LABEL = {
+            "SILO-TRADER-1":    "SCANNING",
+            "SILO-ANALYST-2":   "ANALYZING",
+            "SILO-SKILL-3":     "RESEARCHING",
+            "SILO-GUARD-4":     "MONITORING",
+            "SILO-SCRIBE-5":    "ARCHIVING",
+            "SILO-HUNTER-6":    "HUNTING",
+            "SILO-ORACLE-7":    "FORECASTING",
+            "SILO-SUSTAINER-8": "DEPLOYING",
+            "SILO-SENTRY-9":    "PATROLLING",
+        }
+
         feed = []
         for row in rows:
             name = row["agent_name"]
             outcome = row["outcome"] or "wait"
             action = row["action"] or outcome
             confidence = row["confidence"] or 50
-            # Strip nested JSON blobs from reasoning — keep plain text only
             raw_reason = row["reasoning"] or ""
             reasoning = raw_reason if not raw_reason.startswith("{") else ""
             try:
                 ts = datetime.datetime.utcfromtimestamp(float(row["timestamp"])).strftime("%Y-%m-%dT%H:%M:%SZ")
             except Exception:
                 ts = str(row["timestamp"])
-            tag = label_map.get(action, action.upper()[:8])
+
+            # Resolve label: action first, then outcome, then agent-idle fallback
+            tag = ACTION_LABELS.get(action) or ACTION_LABELS.get(outcome)
+            if not tag or tag == "STANDBY":
+                tag = AGENT_IDLE_LABEL.get(name, "ANALYZING")
+
+            tx = row["tx_hash"] if hasattr(row, "keys") else None
+            tx_link = f"https://www.oklink.com/xlayer/tx/{tx}" if tx and tx not in ("DRY_RUN", "", None) else None
             feed.append({
                 "ts": ts,
                 "agent": name,
                 "action": tag,
                 "outcome": outcome,
                 "confidence": confidence,
-                "reasoning": reasoning[:100],
+                "reasoning": reasoning[:120],
                 "okb_price": okb_price,
+                "tx_hash": tx,
+                "tx_link": tx_link,
             })
 
         return {"feed": feed, "okb_price": okb_price}

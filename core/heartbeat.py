@@ -350,22 +350,27 @@ Buffer zone: balance < 0.00666 OKB (3x floor) → ALWAYS buy OKB with USDT, neve
 Only sell OKB if balance > 0.01 OKB AND you see a clear profitable spread.
 
 === INSTRUCTIONS ===
-You MUST take an action this cycle. "wait" is only valid if trading is paused or there is a clear risk signal.
-If can_trade=True:
-  - TRADER/SUSTAINER: prefer USDT→OKB buyback. This grows the vault.
-  - ANALYST/ORACLE: assess OKB dip-buy opportunities — when price drops, it is a BUY signal.
-  - HUNTER/SENTRY: find high-spread alt pairs or new listings; book profit back into OKB.
-  - SKILL-BROKER: attempt a skill-sync or x402 relic acquisition.
-  - GUARD: run a security check and decide if the current threat level blocks trading.
-  - SCRIBE: record patterns, mark OKB accumulation events, update knowledge graph.
+Every agent MUST choose a specific action below — never return "wait" unless the vault is
+paused or a critical risk blocks ALL activity. There is ALWAYS something useful to do.
+
+Choose the action that best fits your role:
+  TRADER   → "swap" (execute) | "scan" (hunt for spread) | "analyze" (price study)
+  ANALYST  → "analyze" (market deep-dive) | "forecast" (price projection) | "swap"
+  SKILL-3  → "skill_sync" (knowledge share) | "deploy" (register relic) | "research"
+  GUARD    → "monitor" (threat scan) | "analyze" (risk assessment) | "patrol"
+  SCRIBE   → "archive" (record patterns) | "research" (mine knowledge) | "analyze"
+  HUNTER   → "scan" (hunt opportunity) | "swap" (capture spread) | "forecast"
+  ORACLE   → "forecast" (price prediction) | "analyze" (on-chain signals) | "scan"
+  SUSTAINER→ "swap" (OKB buyback) | "deploy" (reinvest) | "monitor"
+  SENTRY   → "patrol" (security sweep) | "scan" (alt-token radar) | "monitor"
 
 For a "swap" action (PREFERRED direction: USDT→OKB), params MUST include:
   {{"from_token": "USDT", "to_token": "OKB", "amount": "0.001", "dry_run": false}}
 
 Return ONLY valid JSON (no markdown, no code blocks):
 {{
-  "action": "swap|lp|skill_sync|observe|wait",
-  "reasoning": "one concise sentence explaining why",
+  "action": "swap|lp|skill_sync|scan|analyze|forecast|research|deploy|archive|monitor|patrol|wait",
+  "reasoning": "one concise sentence explaining what you found or why you acted",
   "confidence": 0-100,
   "params": {{}},
   "knowledge_to_record": [
@@ -515,7 +520,6 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str) -> dict:
         }
 
     elif action == "skill_sync":
-        # Record skill sync as collaboration event
         memory.record_observation(
             name, "skill", "sync_event",
             f"synced with swarm at {heartbeat_id}",
@@ -523,8 +527,29 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str) -> dict:
         )
         return {"outcome": "skill_synced", "heartbeat_id": heartbeat_id}
 
+    elif action in ("scan", "analyze", "forecast", "research", "deploy",
+                    "archive", "monitor", "patrol"):
+        # Active observation — record to knowledge graph, counts as real activity
+        obs_type = {
+            "scan":     "opportunity",
+            "analyze":  "market",
+            "forecast": "market",
+            "research": "pattern",
+            "deploy":   "pattern",
+            "archive":  "pattern",
+            "monitor":  "risk",
+            "patrol":   "risk",
+        }.get(action, "pattern")
+        reasoning = decision.get("reasoning", "")[:200]
+        if reasoning:
+            memory.record_observation(
+                name, obs_type, f"{action}_{name.lower()}",
+                reasoning, confidence=min(1.0, confidence / 100.0),
+            )
+        return {"outcome": action, "reasoning": reasoning}
+
     else:
-        return {"outcome": action, "reason": "no-op"}
+        return {"outcome": "wait", "reason": "no active signal"}
 
 
 # ─── Learning Phase ───────────────────────────────────────────────────────────

@@ -575,19 +575,29 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
 
 // ─── Trade History Graph Feed ─────────────────────────────────────────────────
 
-type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string };
+type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string; txLink?: string };
 
 function actionColor(action: string): { color: string; icon: string } {
   const map: Record<string, { color: string; icon: string }> = {
-    SWAP:    { color: "#DAA520", icon: "⬡" },
-    QUOTE:   { color: "#FB923C", icon: "◈" },
-    OBSERVE: { color: "#60A5FA", icon: "◈" },
-    LEARN:   { color: "#C084FC", icon: "◇" },
-    WAIT:    { color: "#4A3A22", icon: "·" },
-    HOLD:    { color: "#FBBF24", icon: "◊" },
-    ERR:     { color: "#F87171", icon: "✕" },
+    // Active execution
+    SWAP:         { color: "#DAA520", icon: "⬡" },
+    LP:           { color: "#FFD700", icon: "⬢" },
+    DEPLOYING:    { color: "#C084FC", icon: "◈" },
+    // Intelligence ops
+    SCANNING:     { color: "#34D399", icon: "◈" },
+    ANALYZING:    { color: "#60A5FA", icon: "◇" },
+    FORECASTING:  { color: "#A78BFA", icon: "◊" },
+    RESEARCHING:  { color: "#38BDF8", icon: "◈" },
+    HUNTING:      { color: "#FB923C", icon: "⬡" },
+    // Maintenance ops
+    ARCHIVING:    { color: "#6EE7B7", icon: "◇" },
+    MONITORING:   { color: "#FCD34D", icon: "◊" },
+    PATROLLING:   { color: "#F472B6", icon: "◈" },
+    // System states
+    GUARDING:     { color: "#FBBF24", icon: "◊" },
+    ERR:          { color: "#F87171", icon: "✕" },
   };
-  return map[action] ?? { color: "#6B5C3A", icon: "○" };
+  return map[action] ?? { color: "#4A3A22", icon: "·" };
 }
 
 function TradeFeed({ apiBase }: { apiBase: string }) {
@@ -597,18 +607,18 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     const loadFeed = async () => {
       try {
-        const r = await fetch(`${apiBase}/api/feed?limit=12`, { headers: FETCH_HEADERS });
+        const r = await fetch(`${apiBase}/api/feed?limit=18`, { headers: FETCH_HEADERS });
         if (r.ok) {
           const data = await r.json();
           if (data.feed && data.feed.length > 0) {
-            const rows: FeedRow[] = data.feed.map((item: { ts: string; agent: string; action: string; confidence: number; reasoning: string; okb_price: number; outcome: string }) => {
+            const rows: FeedRow[] = data.feed.map((item: { ts: string; agent: string; action: string; confidence: number; reasoning: string; okb_price: number; outcome: string; tx_link?: string }) => {
               const { color, icon } = actionColor(item.action);
               const ts = new Date(item.ts);
               const time = ts.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
               const detail = item.reasoning
-                ? `${item.reasoning} · conf ${item.confidence}`
-                : `OKB $${data.okb_price?.toFixed(2)} · conf ${item.confidence}`;
-              return { time, action: item.action, agent: item.agent, detail, color, icon };
+                ? `${item.reasoning} · ${item.confidence}%`
+                : `OKB $${data.okb_price?.toFixed(2)} · ${item.confidence}%`;
+              return { time, action: item.action, agent: item.agent, detail, color, icon, txLink: item.tx_link };
             });
             setFeed(rows);
           }
@@ -649,7 +659,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
           <div>
             <div className="text-xs tracking-[0.3em] mb-1" style={{ color: "#B8860B" }}>LIVE CIPHER FEED</div>
             <div className="text-xs font-mono" style={{ color: "#4A3A22" }}>
-              Every 2h · observe → reason → act → learn → repeat
+              48×/day · observe → reason → act → learn → evolve
             </div>
           </div>
           {/* Sparkline */}
@@ -669,19 +679,33 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
         </div>
 
         {/* Feed rows */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {feed.map((row, i) => (
             <div key={i} className="flex items-start gap-3 py-2" style={{ borderBottom: "1px solid #0F0C08" }}>
               <span className="font-mono text-xs flex-shrink-0 w-12" style={{ color: "#3A2C16" }}>{row.time}</span>
               <span className="font-mono text-xs flex-shrink-0" style={{ color: row.color }}>{row.icon}</span>
               <span
                 className="font-mono text-xs flex-shrink-0 px-1.5 py-0.5 tracking-wider"
-                style={{ background: `${row.color}15`, color: row.color, border: `1px solid ${row.color}30` }}
+                style={{ background: `${row.color}15`, color: row.color, border: `1px solid ${row.color}30`, minWidth: "7rem", textAlign: "center" }}
               >
                 {row.action}
               </span>
-              <span className="font-mono text-xs flex-shrink-0 hidden sm:inline" style={{ color: "#4A3A22" }}>{row.agent}</span>
+              <span className="font-mono text-xs flex-shrink-0 hidden md:inline" style={{ color: "#4A3A22" }}>
+                {row.agent.replace("SILO-", "")}
+              </span>
               <span className="font-mono text-xs flex-1 truncate" style={{ color: "#6B5C3A" }}>{row.detail}</span>
+              {row.txLink && (
+                <a
+                  href={row.txLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs flex-shrink-0 px-1.5 py-0.5 transition-all"
+                  style={{ color: "#DAA520", border: "1px solid #DAA52040", background: "#1A1002" }}
+                  title="View on OKLink"
+                >
+                  TX ↗
+                </a>
+              )}
             </div>
           ))}
         </div>
