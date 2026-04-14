@@ -129,6 +129,34 @@ function bezierPoint(ax: number, ay: number, cx: number, cy: number, bx: number,
   };
 }
 
+// ── Agent → neural path mapping ───────────────────────────────────────────────
+
+const AGENT_PATH: Record<string, { path: string[]; color: string }> = {
+  "SILO-TRADER-1":    { path: ["in1", "sk1", "core", "out1"], color: "#22c55e" },
+  "SILO-ANALYST-2":   { path: ["in2", "sk2", "core", "out1"], color: "#22d3ee" },
+  "SILO-SKILL-3":     { path: ["in3", "sk1", "core", "out2"], color: "#7c3aed" },
+  "SILO-GUARD-4":     { path: ["in2", "sk2", "core", "out2"], color: "#FBBF24" },
+  "SILO-SCRIBE-5":    { path: ["in1", "sk1", "core", "out2"], color: "#ec4899" },
+  "SILO-HUNTER-6":    { path: ["in1", "sk1", "core", "out1"], color: "#00f0ff" },
+  "SILO-ORACLE-7":    { path: ["in3", "sk2", "core", "out1"], color: "#38BDF8" },
+  "SILO-SUSTAINER-8": { path: ["in2", "sk1", "core", "out2"], color: "#a78bfa" },
+  "SILO-SENTRY-9":    { path: ["in1", "sk2", "core", "out2"], color: "#FB923C" },
+};
+
+const ACTION_STEP_LABELS: Record<string, string[]> = {
+  SWAP:        ["SIGNAL DETECTED",  "PATTERN CONFIRMED", "KNOWLEDGE APPLIED", "SWAP EXECUTED"],
+  HUNTING:     ["SCANNING TARGET",  "RISK CLEARED",      "CONVICTION BUILT",  "HUNT ACTIVE"],
+  SCANNING:    ["SIGNAL DETECTED",  "PATTERN BUILDING",  "KNOWLEDGE LINKED",  "SIGNAL QUEUED"],
+  ANALYZING:   ["DATA INGESTED",    "PATTERN MATCHED",   "KNOWLEDGE LINKED",  "ANALYSIS COMPLETE"],
+  FORECASTING: ["SIGNAL INGESTED",  "MODEL UPDATED",     "FORECAST ISSUED",   "ORACLE ACTIVE"],
+  ARCHIVING:   ["CYCLE COMPLETE",   "PATTERN EXTRACTED", "KNOWLEDGE STORED",  "VAULT UPDATED"],
+  DEPLOYING:   ["SKILL ACQUIRED",   "SYNC INITIATED",    "PEERS UPDATED",     "SKILL DEPLOYED"],
+  GUARDING:    ["RISK DETECTED",    "ARBITER ENGAGED",   "POSITION PROTECTED","VAULT SECURED"],
+  PATROLLING:  ["PERIMETER CHECK",  "THREAT SCAN",       "SIGNATURE CLEAR",   "SENTRY ACTIVE"],
+  RESEARCHING: ["DATA SOURCED",     "PATTERN MINED",     "KNOWLEDGE BUILT",   "RESEARCH COMPLETE"],
+  MONITORING:  ["FEED ACTIVE",      "METRICS CAPTURED",  "THRESHOLDS CHECKED","MONITOR ONLINE"],
+};
+
 // ── React component ───────────────────────────────────────────────────────────
 
 interface ChainStep {
@@ -141,6 +169,10 @@ interface ChainStep {
 export default function NeuronArena() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [chainDisplay, setChainDisplay] = useState<{ steps: ChainStep[]; activeStep: number; color: string } | null>(null);
+  const liveChainRef  = useRef<typeof CHAINS>([...CHAINS]);
+  // Ring shockwave events fired when a new agent action arrives
+  const pulseQueueRef = useRef<{ x: number; y: number; color: string; label: string }[]>([]);
+  const lastFeedTsRef = useRef<string>("");
 
   const buildEdgeBeziers = useCallback((nodes: typeof NODES, W: number, H: number): { beziers: BezierMap; nodeMap: NodeMap } => {
     const beziers: BezierMap = {};
@@ -154,6 +186,76 @@ export default function NeuronArena() {
     });
     return { beziers, nodeMap };
   }, []);
+
+  // ── Poll /api/feed and build live chains ─────────────────────────────────────
+  useEffect(() => {
+    const buildChainFromFeed = (item: FeedItem) => {
+      const agentPath = AGENT_PATH[item.agent];
+      if (!agentPath) return null;
+      const stepLabels = ACTION_STEP_LABELS[item.action] ?? ACTION_STEP_LABELS["ANALYZING"];
+      const shortAgent = item.agent.replace("SILO-", "");
+      const reasoning = item.reasoning || `${item.action} cycle active`;
+      return {
+        path: agentPath.path,
+        color: agentPath.color,
+        steps: [
+          { label: stepLabels[0], detail: `${shortAgent} · ${item.action}`,              extra: `cycle in progress` },
+          { label: stepLabels[1], detail: reasoning.slice(0, 60),                         extra: `confidence ${item.confidence}%` },
+          { label: stepLabels[2], detail: "Knowledge graph updated — swarm synced",       extra: "8-axis score recalibrated" },
+          { label: stepLabels[3], detail: item.tx_hash ? `tx: ${item.tx_hash.slice(0,14)}…` : "output logged to vault", extra: `${shortAgent} ◈ complete` },
+        ],
+      };
+    };
+
+    const poll = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/api/feed?limit=9`, { headers: FETCH_HEADERS });
+        if (!r.ok) return;
+        const data = await r.json();
+        const items: FeedItem[] = data.feed ?? [];
+        if (!items.length) return;
+
+        // Rebuild chain pool from live feed items + static fallbacks
+        const liveChains = items
+          .map(buildChainFromFeed)
+          .filter(Boolean) as typeof CHAINS;
+        liveChainRef.current = liveChains.length >= 2
+          ? [...liveChains, ...CHAINS.slice(0, 2)]
+          : [...CHAINS];
+
+        // Detect new events → enqueue pulse explosions
+        const newest = items[0];
+        if (newest && newest.ts !== lastFeedTsRef.current) {
+          lastFeedTsRef.current = newest.ts;
+          const agentPath = AGENT_PATH[newest.agent];
+          if (agentPath) {
+            const col = agentPath.color;
+            const shortAgent = newest.agent.replace("SILO-", "");
+            // Queue pulse at each node in the path (staggered)
+            agentPath.path.forEach((nodeId, i) => {
+              setTimeout(() => {
+                const node = NODES.find(n => n.id === nodeId);
+                if (node) {
+                  pulseQueueRef.current.push({
+                    x: node.xp,  // fractional — resolved to px in canvas loop
+                    y: node.yp,
+                    color: col,
+                    label: i === agentPath.path.length - 1 ? `${shortAgent} ◈ ${newest.action}` : "",
+                  });
+                }
+              }, i * 280);
+            });
+          }
+        }
+      } catch {
+        // Keep using static chains
+      }
+    };
+
+    poll();
+    const iv = setInterval(poll, 25_000);
+    return () => clearInterval(iv);
+  }, []); // eslint-disable-line
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -214,6 +316,10 @@ export default function NeuronArena() {
     let chainCursor = 0;
     let nextCascadeFrame = 120; // start first cascade at frame 120
 
+    // ── Shockwave rings (triggered by new feed events) ─────────────────────────
+    interface Shockwave { x: number; y: number; r: number; maxR: number; alpha: number; color: string; label: string }
+    const shockwaves: Shockwave[] = [];
+
     // ── Burst particles ────────────────────────────────────────────────────────
     interface Burst { x: number; y: number; vx: number; vy: number; alpha: number; size: number; color: string }
     const bursts: Burst[] = [];
@@ -253,6 +359,24 @@ export default function NeuronArena() {
       const ctx = canvas.getContext("2d")!;
       frame++;
 
+      // ── Process pulse queue from live feed events ─────────────────────────────
+      while (pulseQueueRef.current.length > 0) {
+        const p = pulseQueueRef.current.shift()!;
+        const px = p.x * W, py = p.y * H;
+        // Shockwave ring
+        shockwaves.push({ x: px, y: py, r: 8, maxR: 90, alpha: 1, color: p.color, label: p.label });
+        // Micro-particle velocity kick — all particles surge away from this point
+        micros.forEach(m => {
+          const dx = m.x - px, dy = m.y - py;
+          const dist = Math.sqrt(dx * dx + dy * dy) + 1;
+          const force = Math.max(0, 1 - dist / 180) * 4.0;
+          m.vx += (dx / dist) * force;
+          m.vy += (dy / dist) * force;
+        });
+        // Explosion burst at the node
+        spawnBurst(px, py, p.color, p.label ? 60 : 25);
+      }
+
       // Background — deep black with very slight alpha trail for motion blur
       ctx.fillStyle = "rgba(5, 4, 2, 0.88)";
       ctx.fillRect(0, 0, W, H);
@@ -267,6 +391,12 @@ export default function NeuronArena() {
 
       // ── 1. Micro-particle field ──────────────────────────────────────────────
       micros.forEach(m => {
+        // Dampen velocity back to baseline after pulse kick
+        m.vx *= 0.96;
+        m.vy *= 0.96;
+        // Add natural drift back if nearly stopped
+        if (Math.abs(m.vx) < 0.18) m.vx += (Math.random() - 0.5) * 0.04;
+        if (Math.abs(m.vy) < 0.18) m.vy += (Math.random() - 0.5) * 0.04;
         m.x += m.vx; m.y += m.vy;
         // Wrap at edges
         if (m.x < 0) m.x += W; if (m.x > W) m.x -= W;
@@ -360,7 +490,8 @@ export default function NeuronArena() {
       // ── 4. Auto-launch cascade ───────────────────────────────────────────────
       nextCascadeFrame--;
       if (nextCascadeFrame <= 0 && !cascade) {
-        const ch = CHAINS[chainCursor % CHAINS.length];
+        const pool = liveChainRef.current;
+        const ch = pool[chainCursor % pool.length];
         chainCursor++;
         cascade = {
           chainIdx: chainCursor - 1,
@@ -378,7 +509,8 @@ export default function NeuronArena() {
 
       // ── 5. Cascade travel ───────────────────────────────────────────────────
       if (cascade && !cascade.completed) {
-        const ch = CHAINS[cascade.chainIdx % CHAINS.length];
+        const pool = liveChainRef.current;
+        const ch = pool[cascade.chainIdx % pool.length];
         const path = ch.path;
         const fromId = path[cascade.pathStep];
         const toId   = path[cascade.pathStep + 1];
@@ -466,6 +598,40 @@ export default function NeuronArena() {
         ctx.beginPath();
         ctx.arc(bp.x, bp.y, bp.size * 0.5, 0, Math.PI * 2);
         ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // ── 7. Shockwave rings ────────────────────────────────────────────────────
+      for (let i = shockwaves.length - 1; i >= 0; i--) {
+        const sw = shockwaves[i];
+        sw.r += (sw.maxR - sw.r) * 0.09 + 1.2;
+        sw.alpha -= 0.022;
+        if (sw.alpha <= 0) { shockwaves.splice(i, 1); continue; }
+
+        // Outer expanding ring
+        ctx.globalAlpha = sw.alpha * 0.7;
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
+        ctx.strokeStyle = sw.color;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // Inner ring (slightly smaller, faster)
+        ctx.globalAlpha = sw.alpha * 0.35;
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.r * 0.65, 0, Math.PI * 2);
+        ctx.strokeStyle = sw.color;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Label at the explosion point (final node only)
+        if (sw.label && sw.r < 45) {
+          ctx.globalAlpha = sw.alpha * 1.2;
+          ctx.font = "bold 10px 'JetBrains Mono', monospace";
+          ctx.fillStyle = sw.color;
+          ctx.textAlign = "center";
+          ctx.fillText(sw.label, sw.x, sw.y - sw.r - 6);
+        }
       }
       ctx.globalAlpha = 1;
 
