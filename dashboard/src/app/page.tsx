@@ -741,11 +741,12 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
         {txOpen && (
           <div style={{ padding: "10px 20px 14px" }}>
             {verifiedTxs.length === 0 ? (
-              <div style={{
+              <div className="animate-pulse" style={{
                 fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
-                color: "#2A4A2A", padding: "8px 0",
+                color: "#22c55e", padding: "8px 0", opacity: 0.6,
+                letterSpacing: "0.15em",
               }}>
-                Waiting for on-chain transactions… heartbeat runs every 30 min
+                ◈ INCOMING DATA · TX LOADING...
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1104,7 +1105,7 @@ export default function SilopolisPage() {
                 {totalTx} <span style={{ color: "#4A3A22" }}>EXCAVATIONS</span>
               </div>
               {/* Live heartbeat timer */}
-              <HeartbeatTimer apiBase={API_BASE} cycleIntervalSec={7200} />
+              <HeartbeatTimer apiBase={API_BASE} cycleIntervalSec={1800} />
 
               <button
                 onClick={triggerCycle}
@@ -1431,7 +1432,7 @@ export default function SilopolisPage() {
             <div className="text-xs tracking-[0.3em] mb-2" style={{ color: "#B8860B" }}>ON-CHAIN ACTIVITY</div>
             <h2 className="text-4xl font-black tracking-tight" style={{ color: "#DAA520" }}>LIVE FEED</h2>
             <p className="text-sm mt-2 font-mono" style={{ color: "#4A3A22" }}>
-              Every cycle captured · 12 heartbeats/day · every 2h · immutable audit trail
+              Autonomous · 9 agents · real decisions · every action provable on-chain
             </p>
           </div>
           <a
