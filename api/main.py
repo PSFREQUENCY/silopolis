@@ -455,6 +455,8 @@ def cipher_feed(limit: int = 20):
             "monitor":        "MONITORING",
             "patrol":         "PATROLLING",
             "observe":        "ANALYZING",
+            "queue_swap":     "QUEUED",
+            "queued":         "QUEUED",
             "risk_hold":      "GUARDING",
             "blocked":        "GUARDING",
             "error":          "ERR",
@@ -492,6 +494,20 @@ def cipher_feed(limit: int = 20):
             if not tag or tag == "STANDBY":
                 tag = AGENT_IDLE_LABEL.get(name, "ANALYZING")
 
+            # For queued entries, pull reasoning from the outcome JSON if available
+            if not reasoning and outcome == "queued":
+                try:
+                    import sqlite3 as _sq
+                    out_row = conn.execute(
+                        "SELECT outcome FROM decision_log WHERE agent_name=? AND timestamp=? LIMIT 1",
+                        (row["agent_name"], row["timestamp"])
+                    ).fetchone()
+                    if out_row and out_row["outcome"]:
+                        import json as _j
+                        od = _j.loads(out_row["outcome"]) if str(out_row["outcome"]).startswith("{") else {}
+                        reasoning = od.get("reasoning", reasoning)[:120]
+                except Exception:
+                    pass
             tx = row["tx_hash"] if hasattr(row, "keys") else None
             tx_link = f"https://www.oklink.com/xlayer/tx/{tx}" if tx and tx not in ("DRY_RUN", "", None) else None
             feed.append({

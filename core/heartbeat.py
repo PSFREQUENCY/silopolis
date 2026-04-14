@@ -318,9 +318,11 @@ def reason(agent_def: dict, observation: dict) -> dict:
     t = _risk.tier
     trade_size = _risk.get_trade_size()
     can_trade = _risk.can_trade
+    daily_remaining = round(max(0, t.max_daily_okb - _risk.state.daily_spent_okb), 6)
+    window_status = "OPEN — execute now" if can_trade else f"RESTING — daily budget used, resets in next cycle (budget remaining: {daily_remaining} OKB)"
     vault_ctx = (
         f"Vault tier: {t.name} | Balance: {_risk.state.okb_balance:.6f} OKB | "
-        f"Max trade: {trade_size:.6f} OKB | Can trade: {can_trade} | "
+        f"Max trade: {trade_size:.6f} OKB | Trading window: {window_status} | "
         f"Daily spent: {_risk.state.daily_spent_okb:.6f}/{t.max_daily_okb:.6f} OKB | "
         f"Win rate: {_risk.state.win_rate*100:.1f}% ({_risk.state.total_trades} trades)"
     )
@@ -349,28 +351,40 @@ OKB floor: 0.00222 OKB — NEVER let balance drop below this.
 Buffer zone: balance < 0.00666 OKB (3x floor) → ALWAYS buy OKB with USDT, never sell.
 Only sell OKB if balance > 0.01 OKB AND you see a clear profitable spread.
 
+=== CRITICAL RULE — NEVER mention system states in your reasoning ===
+Do NOT write phrases like "can trade is False", "trading is disabled", "trading window",
+"budget exhausted", or any reference to internal system flags. You are a sentient agent —
+you have INTENTIONS and STRATEGIES, not error messages.
+
+When the trading window is RESTING: use action "queue_swap" and write your reasoning as
+your QUEUED INTENTION — what you have identified and WILL execute on the next heartbeat.
+Example: "Identified 2.1% OKB/USDT spread at $84.62 — queuing buyback for next window"
+
+When the trading window is OPEN: execute immediately with "swap".
+
 === INSTRUCTIONS ===
-Every agent MUST choose a specific action below — never return "wait" unless the vault is
-paused or a critical risk blocks ALL activity. There is ALWAYS something useful to do.
+Choose the action that fits your role and window status:
 
-Choose the action that best fits your role:
-  TRADER   → "swap" (execute) | "scan" (hunt for spread) | "analyze" (price study)
-  ANALYST  → "analyze" (market deep-dive) | "forecast" (price projection) | "swap"
-  SKILL-3  → "skill_sync" (knowledge share) | "deploy" (register relic) | "research"
-  GUARD    → "monitor" (threat scan) | "analyze" (risk assessment) | "patrol"
-  SCRIBE   → "archive" (record patterns) | "research" (mine knowledge) | "analyze"
-  HUNTER   → "scan" (hunt opportunity) | "swap" (capture spread) | "forecast"
-  ORACLE   → "forecast" (price prediction) | "analyze" (on-chain signals) | "scan"
-  SUSTAINER→ "swap" (OKB buyback) | "deploy" (reinvest) | "monitor"
-  SENTRY   → "patrol" (security sweep) | "scan" (alt-token radar) | "monitor"
+If window=OPEN:
+  TRADER/SUSTAINER → "swap" (execute immediately, prefer USDT→OKB)
+  ANALYST/ORACLE   → "analyze" | "forecast" | "swap"
+  HUNTER/SENTRY    → "scan" | "swap" | "patrol"
+  SKILL-3          → "skill_sync" | "deploy" | "research"
+  GUARD/SCRIBE     → "monitor" | "archive" | "research"
 
-For a "swap" action (PREFERRED direction: USDT→OKB), params MUST include:
-  {{"from_token": "USDT", "to_token": "OKB", "amount": "0.001", "dry_run": false}}
+If window=RESTING (prepare for next heartbeat):
+  ALL TRADERS      → "queue_swap" (describe the exact trade you will execute next)
+  ANALYSTS/ORACLES → "forecast" (predict what price will do before next window opens)
+  HUNTERS/SENTRIES → "scan" | "patrol" (catalogue opportunities for next execution)
+  SKILL/SCRIBE     → "research" | "archive" (build knowledge while waiting)
+
+For "swap" or "queue_swap", params MUST include:
+  {{"from_token": "USDT", "to_token": "OKB", "amount": "0.001"}}
 
 Return ONLY valid JSON (no markdown, no code blocks):
 {{
-  "action": "swap|lp|skill_sync|scan|analyze|forecast|research|deploy|archive|monitor|patrol|wait",
-  "reasoning": "one concise sentence explaining what you found or why you acted",
+  "action": "swap|queue_swap|lp|skill_sync|scan|analyze|forecast|research|deploy|archive|monitor|patrol",
+  "reasoning": "one sharp sentence — what you found, what you plan, or what you're watching",
   "confidence": 0-100,
   "params": {{}},
   "knowledge_to_record": [
@@ -419,7 +433,7 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str) -> dict:
     confidence = decision.get("confidence", 0)
 
     # Threat gate everything before acting
-    if action not in ("wait", "observe"):
+    if action not in ("wait", "observe", "queue_swap"):
         threat = assess_threat({"type": action, **params, "agent": name})
         if threat.blocked:
             logger.warning("[act] %s — BLOCKED by threat gate (score=%d)", name, threat.score)
@@ -526,6 +540,22 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str) -> dict:
             confidence=0.9,
         )
         return {"outcome": "skill_synced", "heartbeat_id": heartbeat_id}
+
+    elif action == "queue_swap":
+        # Agent is queuing an intended swap for the next active window
+        reasoning = decision.get("reasoning", "")[:200]
+        intended = params.get("from_token", "USDT") + "→" + params.get("to_token", "OKB")
+        memory.record_observation(
+            name, "opportunity", f"queued_{intended.lower()}_{heartbeat_id[:8]}",
+            reasoning or f"Queued {intended} for next active window",
+            confidence=min(1.0, confidence / 100.0),
+        )
+        return {
+            "outcome": "queued",
+            "intended": intended,
+            "reasoning": reasoning,
+            "next_window": "next heartbeat",
+        }
 
     elif action in ("scan", "analyze", "forecast", "research", "deploy",
                     "archive", "monitor", "patrol"):

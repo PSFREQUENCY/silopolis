@@ -577,12 +577,14 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
 
 type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string; txLink?: string };
 
-function actionColor(action: string): { color: string; icon: string } {
-  const map: Record<string, { color: string; icon: string }> = {
+function actionColor(action: string): { color: string; icon: string; pulse?: boolean } {
+  const map: Record<string, { color: string; icon: string; pulse?: boolean }> = {
     // Active execution
     SWAP:         { color: "#DAA520", icon: "⬡" },
     LP:           { color: "#FFD700", icon: "⬢" },
     DEPLOYING:    { color: "#C084FC", icon: "◈" },
+    // Queued — agent knows its next move
+    QUEUED:       { color: "#F97316", icon: "⏳", pulse: true },
     // Intelligence ops
     SCANNING:     { color: "#34D399", icon: "◈" },
     ANALYZING:    { color: "#60A5FA", icon: "◇" },
@@ -680,34 +682,64 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
 
         {/* Feed rows */}
         <div className="space-y-1.5">
-          {feed.map((row, i) => (
-            <div key={i} className="flex items-start gap-3 py-2" style={{ borderBottom: "1px solid #0F0C08" }}>
-              <span className="font-mono text-xs flex-shrink-0 w-12" style={{ color: "#3A2C16" }}>{row.time}</span>
-              <span className="font-mono text-xs flex-shrink-0" style={{ color: row.color }}>{row.icon}</span>
-              <span
-                className="font-mono text-xs flex-shrink-0 px-1.5 py-0.5 tracking-wider"
-                style={{ background: `${row.color}15`, color: row.color, border: `1px solid ${row.color}30`, minWidth: "7rem", textAlign: "center" }}
+          {feed.map((row, i) => {
+            const isQueued = row.action === "QUEUED";
+            const isSwap   = row.action === "SWAP";
+            return (
+              <div
+                key={i}
+                className="flex items-start gap-3 py-2"
+                style={{
+                  borderBottom: "1px solid #0F0C08",
+                  background: isQueued ? `${row.color}08` : undefined,
+                }}
               >
-                {row.action}
-              </span>
-              <span className="font-mono text-xs flex-shrink-0 hidden md:inline" style={{ color: "#4A3A22" }}>
-                {row.agent.replace("SILO-", "")}
-              </span>
-              <span className="font-mono text-xs flex-1 truncate" style={{ color: "#6B5C3A" }}>{row.detail}</span>
-              {row.txLink && (
-                <a
-                  href={row.txLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-xs flex-shrink-0 px-1.5 py-0.5 transition-all"
-                  style={{ color: "#DAA520", border: "1px solid #DAA52040", background: "#1A1002" }}
-                  title="View on OKLink"
+                <span className="font-mono text-xs flex-shrink-0 w-12" style={{ color: "#3A2C16" }}>{row.time}</span>
+                <span
+                  className={`font-mono text-xs flex-shrink-0 ${isQueued ? "animate-pulse" : ""}`}
+                  style={{ color: row.color }}
                 >
-                  TX ↗
-                </a>
-              )}
-            </div>
-          ))}
+                  {row.icon}
+                </span>
+                <span
+                  className={`font-mono text-xs flex-shrink-0 px-1.5 py-0.5 tracking-wider ${isQueued ? "animate-pulse" : ""}`}
+                  style={{
+                    background: isSwap ? `${row.color}25` : `${row.color}15`,
+                    color: row.color,
+                    border: `1px solid ${row.color}${isSwap ? "60" : "30"}`,
+                    minWidth: "7.5rem",
+                    textAlign: "center",
+                    fontWeight: isSwap || isQueued ? 800 : 400,
+                  }}
+                >
+                  {row.action}
+                </span>
+                <span className="font-mono text-xs flex-shrink-0 hidden md:inline" style={{ color: "#4A3A22" }}>
+                  {row.agent.replace("SILO-", "")}
+                </span>
+                <span className="font-mono text-xs flex-1 truncate" style={{ color: isQueued ? "#9A7040" : "#6B5C3A" }}>
+                  {row.detail}
+                </span>
+                {isQueued && (
+                  <span className="font-mono text-xs flex-shrink-0 animate-pulse" style={{ color: "#F97316", opacity: 0.7 }}>
+                    → NEXT HB
+                  </span>
+                )}
+                {row.txLink && (
+                  <a
+                    href={row.txLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-xs flex-shrink-0 px-1.5 py-0.5 transition-all"
+                    style={{ color: "#DAA520", border: "1px solid #DAA52040", background: "#1A1002" }}
+                    title="View on OKLink"
+                  >
+                    TX ↗
+                  </a>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
