@@ -67,7 +67,12 @@ class VaultState:
     consecutive_losses: int = 0
     daily_spent_okb: float = 0.0
     day_start: float = field(default_factory=time.time)
-    paused_until: float = 0.0   # unix timestamp — 0 means not paused
+    paused_until: float = 0.0       # unix timestamp — 0 means not paused
+    # Campaign mode — set by user to drive aggressive OKB accumulation
+    campaign_cycles_remaining: int = 0
+    campaign_mode: str = ""         # e.g. "aggressive_okb"
+    total_okb_bought: float = 0.0   # cumulative OKB acquired via buybacks
+    total_usdt_spent: float = 0.0   # cumulative USDT spent on buybacks
 
     @property
     def win_rate(self) -> float:
@@ -77,6 +82,10 @@ class VaultState:
     @property
     def is_paused(self) -> bool:
         return time.time() < self.paused_until
+
+    @property
+    def in_campaign(self) -> bool:
+        return self.campaign_cycles_remaining > 0 and self.campaign_mode != ""
 
     def reset_daily(self) -> None:
         if time.time() - self.day_start >= 86400:
@@ -105,14 +114,18 @@ def load_vault_state() -> VaultState:
 def save_vault_state(state: VaultState) -> None:
     _STATE_PATH.parent.mkdir(exist_ok=True)
     _STATE_PATH.write_text(json.dumps({
-        "okb_balance":       state.okb_balance,
-        "total_trades":      state.total_trades,
-        "winning_trades":    state.winning_trades,
-        "total_profit_okb":  state.total_profit_okb,
-        "consecutive_losses": state.consecutive_losses,
-        "daily_spent_okb":   state.daily_spent_okb,
-        "day_start":         state.day_start,
-        "paused_until":      state.paused_until,
+        "okb_balance":               state.okb_balance,
+        "total_trades":              state.total_trades,
+        "winning_trades":            state.winning_trades,
+        "total_profit_okb":          state.total_profit_okb,
+        "consecutive_losses":        state.consecutive_losses,
+        "daily_spent_okb":           state.daily_spent_okb,
+        "day_start":                 state.day_start,
+        "paused_until":              state.paused_until,
+        "campaign_cycles_remaining": state.campaign_cycles_remaining,
+        "campaign_mode":             state.campaign_mode,
+        "total_okb_bought":          state.total_okb_bought,
+        "total_usdt_spent":          state.total_usdt_spent,
     }, indent=2))
 
 
@@ -250,6 +263,62 @@ class RiskGovernor:
         # Buy enough to close 50% of the deficit in one shot (conservative)
         return round(min(deficit * 0.5, self.OKB_FLOOR), 6)
 
+    def get_buyback_usdt_amount(self, okb_price: float, available_usdt: float = 0.0) -> float:
+        """
+        Return USDT to spend on an OKB buyback — in USDT units (not OKB).
+        This is what gets passed to execute_swap("USDT", "OKB", amount).
+
+        Campaign mode is aggressive: targets 2× buffer in one shot.
+        Normal mode: closes 50% of deficit.
+        """
+        if okb_price <= 0:
+            okb_price = 84.0
+
+        if self.state.in_campaign:
+            # Aggressive: buy enough to reach 2× buffer in one shot
+            # (builds a real cushion above the buffer, not just barely over it)
+            target_okb = max(0.0, self.OKB_BUFFER * 2.0 - self.state.okb_balance)
+            usdt_needed = target_okb * okb_price
+
+            # Cap per-trade: if USDT known, use 40% of available; else $1.00 max
+            if available_usdt > 0.05:
+                cap = min(available_usdt * 0.40, 5.0)
+            else:
+                cap = 1.00
+
+            amount = round(min(usdt_needed, cap), 4)
+        else:
+            # Normal: close 50% of deficit
+            deficit_okb = max(0.0, self.OKB_BUFFER - self.state.okb_balance)
+            amount = round(min(deficit_okb * 0.5 * okb_price, 0.50), 4)
+
+        return max(0.01, amount)
+
+    def record_buyback(self, usdt_spent: float, okb_received: float) -> None:
+        """
+        Record a completed OKB buyback.
+        Buybacks are capital preservation, not speculative trades — tracked separately.
+        OKB balance is updated directly; this does NOT affect win/loss counters.
+        """
+        self.state.okb_balance += okb_received
+        self.state.total_okb_bought += okb_received
+        self.state.total_usdt_spent += usdt_spent
+        logger.info("[risk] Buyback: spent $%.4f USDT → +%.6f OKB | vault: %.6f OKB",
+                    usdt_spent, okb_received, self.state.okb_balance)
+        save_vault_state(self.state)
+
+    def decrement_campaign(self) -> None:
+        """Called once per cycle to count down the campaign."""
+        if self.state.campaign_cycles_remaining > 0:
+            self.state.campaign_cycles_remaining -= 1
+            logger.info("[campaign] %d cycles remaining | mode: %s | bought so far: %.6f OKB ($%.4f USDT)",
+                        self.state.campaign_cycles_remaining, self.state.campaign_mode,
+                        self.state.total_okb_bought, self.state.total_usdt_spent)
+            if self.state.campaign_cycles_remaining == 0:
+                logger.info("[campaign] COMPLETE — resuming normal operation")
+                self.state.campaign_mode = ""
+            save_vault_state(self.state)
+
     def check_confidence(self, confidence: int) -> bool:
         """Return True if confidence meets the tier's minimum.
         SILOPOLIS_MIN_CONFIDENCE env var overrides the tier floor downward."""
@@ -257,37 +326,47 @@ class RiskGovernor:
         effective_min = min(self.tier.min_confidence, env_min)
         return confidence >= effective_min
 
-    # Minimum loss to count as a real loss (below this = DEX fee noise, not a loss)
-    _LOSS_THRESHOLD = 0.000050  # 0.00005 OKB — smaller than this is just fee rounding
+    # Minimum profit to count as a real win (must actually gain something measurable)
+    _WIN_THRESHOLD  = 0.000010   # 0.00001 OKB — must gain at least this to count as a win
+    # Minimum loss to count as a real loss (below this = DEX fee noise)
+    _LOSS_THRESHOLD = 0.000050   # 0.00005 OKB — smaller is just fee rounding
 
     def record_trade(self, spent_okb: float, profit_okb: float) -> None:
-        """Record a completed trade outcome."""
+        """
+        Record a completed speculative trade outcome.
+        Only call this for OKB→USDT or USDT→OKB speculative trades.
+        For OKB buybacks use record_buyback() instead.
+        """
         self.state.total_trades += 1
         self.state.daily_spent_okb += spent_okb
 
-        if profit_okb >= -self._LOSS_THRESHOLD:
-            # Win or break-even (micro DEX fees don't count as losses)
+        if profit_okb >= self._WIN_THRESHOLD:
+            # Real win — we gained actual OKB
             self.state.winning_trades += 1
             self.state.consecutive_losses = 0
-            if profit_okb > 0:
-                # Capture profit: 50% back to vault, 50% available for next trade
-                net = profit_okb * 0.5
-                self.state.okb_balance += net
-                self.state.total_profit_okb += net
-                logger.info("[risk] Win: +%.6f OKB profit (captured %.6f). Win rate: %.1f%%",
-                            profit_okb, net, self.state.win_rate * 100)
-            else:
-                logger.info("[risk] Break-even (fee noise %.8f OKB). Win rate: %.1f%%",
-                            profit_okb, self.state.win_rate * 100)
+            # Capture profit: 50% back to vault, 50% available for next trade
+            net = profit_okb * 0.5
+            self.state.okb_balance += net
+            self.state.total_profit_okb += net
+            logger.info("[risk] WIN: +%.6f OKB profit (captured %.6f). Win rate: %.1f%% (%d/%d)",
+                        profit_okb, net, self.state.win_rate * 100,
+                        self.state.winning_trades, self.state.total_trades)
+        elif profit_okb >= -self._LOSS_THRESHOLD:
+            # Break-even — fee noise, does NOT count as a win or loss
+            logger.info("[risk] Break-even (%.8f OKB, fee noise). Win rate: %.1f%% (%d/%d)",
+                        profit_okb, self.state.win_rate * 100,
+                        self.state.winning_trades, self.state.total_trades)
         else:
+            # Real loss
             self.state.consecutive_losses += 1
             self.state.okb_balance = max(0, self.state.okb_balance - abs(profit_okb))
-            logger.warning("[risk] Loss: %.6f OKB. Consecutive: %d",
-                           abs(profit_okb), self.state.consecutive_losses)
+            logger.warning("[risk] LOSS: -%.6f OKB. Consecutive: %d. Win rate: %.1f%%",
+                           abs(profit_okb), self.state.consecutive_losses,
+                           self.state.win_rate * 100)
             # 5 consecutive significant losses → pause for 1 cycle (8 hours)
             if self.state.consecutive_losses >= 5:
                 self.state.paused_until = time.time() + 28800  # 8h
-                logger.warning("[risk] 5 consecutive losses — pausing for 8h")
+                logger.warning("[risk] 5 consecutive losses — pausing trading for 8h")
 
         save_vault_state(self.state)
 
@@ -304,6 +383,8 @@ class RiskGovernor:
             "winning_trades":    self.state.winning_trades,
             "win_rate_pct":      round(self.state.win_rate * 100, 1),
             "total_profit_okb":  round(self.state.total_profit_okb, 6),
+            "total_okb_bought":  round(self.state.total_okb_bought, 6),
+            "total_usdt_spent":  round(self.state.total_usdt_spent, 4),
             "consecutive_losses": self.state.consecutive_losses,
             "daily_budget_remaining_okb": round(max(0, t.max_daily_okb - self.state.daily_spent_okb), 6),
             "can_trade":         self.can_trade,
@@ -311,4 +392,7 @@ class RiskGovernor:
             "needs_buyback":     self.needs_buyback,
             "is_paused":         self.state.is_paused,
             "allow_lp":          t.allow_lp,
+            "campaign_cycles_remaining": self.state.campaign_cycles_remaining,
+            "campaign_mode":     self.state.campaign_mode,
+            "in_campaign":       self.state.in_campaign,
         }

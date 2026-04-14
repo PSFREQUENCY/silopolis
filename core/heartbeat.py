@@ -348,13 +348,29 @@ def reason(agent_def: dict, observation: dict) -> dict:
             "PRIORITY #1: acquire OKB. No speculative trades until buffer is restored."
         )
 
+    # Campaign context — communicated as agent intent, not system state
+    campaign_ctx = ""
+    if _risk.state.in_campaign:
+        cycles_left = _risk.state.campaign_cycles_remaining
+        okb_bought  = _risk.state.total_okb_bought
+        campaign_ctx = (
+            f"\n🔥 AGGRESSIVE ACCUMULATION CAMPAIGN ACTIVE — {cycles_left} cycles remaining. "
+            f"Accumulated {okb_bought:.6f} OKB so far. "
+            "MAXIMIZE OKB acquisition every cycle. TRADER-1 and SUSTAINER-8 execute buys. "
+            "All other agents: scan for optimal entry points, forecast price movements, "
+            "identify new opportunities to maximize OKB compounding. "
+            "Target: double the vault OKB holdings before campaign ends."
+        )
+
     vault_ctx = (
         f"Vault tier: {t.name} | Balance: {_risk.state.okb_balance:.6f} OKB | "
         f"Max trade: {trade_size:.6f} OKB | Window: {window_status} | "
         f"Daily spent: {_risk.state.daily_spent_okb:.6f}/{t.max_daily_okb:.6f} OKB | "
-        f"Win rate: {_risk.state.win_rate*100:.1f}% ({_risk.state.total_trades} trades) | "
+        f"Win rate: {_risk.state.win_rate*100:.1f}% ({_risk.state.winning_trades}/{_risk.state.total_trades} real wins) | "
+        f"OKB bought all-time: {_risk.state.total_okb_bought:.6f} OKB | "
         f"ACTION: {window_instruction}"
         f"{buyback_alert}"
+        f"{campaign_ctx}"
     )
 
     okb_price = observation['market'].get('OKB', {}).get('price_usd', 0)
@@ -520,9 +536,19 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
         from_tok = params.get("from_token", "OKB")
         to_tok   = params.get("to_token", "USDT")
 
+        obs_market    = (observation or {}).get("market", {})
+        okb_price     = obs_market.get("OKB", {}).get("price_usd", 84.0) or 84.0
+        wallet_tokens = (observation or {}).get("wallet", {}).get("tokens", [])
+        usdt_balance  = next(
+            (float(t.get("balance") or 0)
+             for t in wallet_tokens
+             if t.get("symbol", "").upper() in ("USDT", "USDT0", "USDTE")),
+            0.0,
+        )
+
         # ── OKB ACCUMULATION GUARD ────────────────────────────────────────────
         # Detect if this is a buyback (acquiring OKB with stable)
-        is_buyback = to_tok.upper() == "OKB" and from_tok.upper() in ("USDT", "USDC", "ETH")
+        is_buyback = to_tok.upper() == "OKB" and from_tok.upper() in ("USDT", "USDC", "ETH", "USDT0")
 
         # Force redirect: if OKB is below buffer and agent is trying to sell OKB,
         # flip the direction to a buyback instead.
@@ -532,14 +558,33 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
             from_tok, to_tok = "USDT", "OKB"
             is_buyback = True
 
-        # Risk gate: buybacks bypass daily budget; speculative trades require can_trade
+        # ── BUYBACK: only designated agents execute to avoid USDT drain ──────
+        # All agents can REASON about buying OKB, but only TRADER-1 and SUSTAINER-8
+        # actually execute. Others get credit for the observation without hitting the wallet.
+        BUYBACK_EXECUTORS = {"SILO-TRADER-1", "SILO-SUSTAINER-8"}
+
         if is_buyback:
             if not _risk.can_buyback:
                 return {"outcome": "risk_hold", "reason": "buyback blocked (floor or pause)",
                         "tier": _risk.tier.name, "tx_hash": None}
-            logger.info("[act] %s — OKB BUYBACK authorized (balance=%.6f, buffer=%.6f)",
-                        name, _risk.state.okb_balance, _risk.OKB_BUFFER)
-            safe_amount = str(_risk.get_buyback_size() or 0.001)
+
+            if name not in BUYBACK_EXECUTORS:
+                # Other agents log the intent but don't execute — prevents USDT from being
+                # fragmented across 9 agents each spending $0.001
+                logger.info("[act] %s — buyback intent noted, deferring execution to TRADER-1/SUSTAINER-8",
+                            name)
+                return {"outcome": "queued", "intended": "USDT→OKB",
+                        "reasoning": "Deferring OKB acquisition to designated buying agents",
+                        "next_window": "next heartbeat", "tx_hash": None}
+
+            # ── CORRECT AMOUNT: USDT to spend (not OKB target) ────────────────
+            # get_buyback_usdt_amount() returns $USD to spend so the CLI call is:
+            # "swap execute --from USDT --to OKB --readable-amount <USD_AMOUNT>"
+            usdt_to_spend = _risk.get_buyback_usdt_amount(okb_price, usdt_balance)
+            logger.info("[act] %s — OKB BUYBACK: spend $%.4f USDT at OKB=$%.2f (vault: %.6f OKB)",
+                        name, usdt_to_spend, okb_price, _risk.state.okb_balance)
+            safe_amount = str(usdt_to_spend)  # in USDT — CLI interprets as "spend this much USDT"
+
         else:
             # Normal speculative trade — check full can_trade gate
             if not _risk.can_trade:
@@ -548,7 +593,7 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
                         "tier": status["tier"], "tx_hash": None}
             safe_amount = str(_risk.get_trade_size())
 
-        if safe_amount == "0.0" or float(safe_amount) == 0:
+        if not safe_amount or float(safe_amount) == 0:
             return {"outcome": "risk_hold", "reason": "trade size zero — protecting OKB floor", "tx_hash": None}
 
         from core.uniswap import execute_swap
@@ -556,34 +601,40 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
 
         result = execute_swap(from_tok, to_tok, safe_amount, dry_run=not live)
 
-        # ── Real P&L (only recorded for LIVE trades, not dry-runs) ───────────
-        # API returns amounts in raw token units:
-        #   OKB  → 18 decimals (wei)   e.g. 1e15 = 0.001 OKB
-        #   USDT → 6  decimals (µUSDT) e.g. 83500 = 0.0835 USDT
-        _TOKEN_DEC = {"OKB": 18, "USDT": 6, "USDC": 6}
-        profit_okb = 0.0
+        # ── P&L accounting (live trades only) ────────────────────────────────
         if live and result.success:
-            try:
-                raw_out = float(getattr(result, 'amount_out', 0) or 0)
-                to_dec = _TOKEN_DEC.get(to_tok.upper(), 18)
-                amount_out_human = raw_out / (10 ** to_dec)
+            raw_out_str = getattr(result, "amount_out", "") or ""
+            _TOKEN_DEC  = {"OKB": 18, "USDT": 6, "USDC": 6}
 
-                if raw_out == 0 or amount_out_human == 0:
-                    # amount_out not populated — treat as confirmed break-even
-                    # (tx went through, we just can't read return value)
-                    profit_okb = 0.0
-                elif to_tok.upper() == "OKB":
-                    # Received OKB — direct gain
-                    profit_okb = amount_out_human - float(safe_amount)
-                elif from_tok.upper() == "OKB":
-                    # Sold OKB for USDT — convert back to OKB equiv
-                    obs_market = (observation or {}).get("market", {})
-                    okb_price = obs_market.get("OKB", {}).get("price_usd", 85.0)
-                    profit_okb = (amount_out_human / okb_price) - float(safe_amount)
-            except Exception:
+            try:
+                raw_out = float(raw_out_str) if raw_out_str else 0.0
+            except ValueError:
+                raw_out = 0.0
+
+            to_dec           = _TOKEN_DEC.get(to_tok.upper(), 18)
+            amount_out_human = raw_out / (10 ** to_dec) if raw_out > 100 else raw_out
+
+            if is_buyback:
+                # ── Buyback: record OKB received (estimated if CLI didn't return it) ──
+                usdt_spent = float(safe_amount)
+                if amount_out_human > 0 and to_tok.upper() == "OKB":
+                    okb_received = amount_out_human
+                else:
+                    # CLI didn't return amount_out — estimate from market price minus 0.3% DEX fee
+                    okb_received = round((usdt_spent / okb_price) * 0.997, 8)
+                    logger.info("[act] %s — estimated OKB received: %.8f OKB ($%.4f @ $%.2f/OKB)",
+                                name, okb_received, usdt_spent, okb_price)
+                _risk.record_buyback(usdt_spent, okb_received)
+            else:
+                # ── Speculative trade: record real P&L ───────────────────────
                 profit_okb = 0.0
-            # Only record if we got a real P&L signal — skip pure break-even
-            _risk.record_trade(float(safe_amount), profit_okb)
+                if amount_out_human > 0:
+                    if to_tok.upper() == "OKB":
+                        profit_okb = amount_out_human - float(safe_amount)
+                    elif from_tok.upper() == "OKB":
+                        profit_okb = (amount_out_human / okb_price) - float(safe_amount)
+                # else: amount_out unknown — break-even, don't touch win counter
+                _risk.record_trade(float(safe_amount), profit_okb)
 
         outcome_label = "executed_swap" if (live and result.success) else "simulated_swap"
         return {
@@ -592,6 +643,7 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
             "amount": safe_amount,
             "amount_out": result.amount_out,
             "direction": f"{from_tok}→{to_tok}",
+            "is_buyback": is_buyback,
             "tier": _risk.tier.name,
             "live": live,
         }
@@ -775,11 +827,19 @@ def run_heartbeat() -> dict:
             logger.error("[%s] cycle error: %s", name, e, exc_info=True)
             errors += 1
 
+    # Decrement campaign counter after each full cycle
+    _risk.decrement_campaign()
+
     # Log risk status after each cycle
     risk_status = _risk.status_dict()
-    logger.info("[risk] Tier=%s | Balance=%.6f OKB | WinRate=%.1f%% | Profit=%.6f OKB",
-                risk_status["tier"], risk_status["okb_balance"],
-                risk_status["win_rate_pct"], risk_status["total_profit_okb"])
+    logger.info(
+        "[risk] Tier=%s | Balance=%.6f OKB | WinRate=%.1f%% | Profit=%.6f OKB"
+        " | OKBBought=%.6f OKB ($%.4f USDT)%s",
+        risk_status["tier"], risk_status["okb_balance"],
+        risk_status["win_rate_pct"], risk_status["total_profit_okb"],
+        risk_status["total_okb_bought"], risk_status["total_usdt_spent"],
+        f" | CAMPAIGN: {risk_status['campaign_cycles_remaining']} cycles left" if risk_status["in_campaign"] else "",
+    )
 
     # Determine overall market sentiment
     from collections import Counter

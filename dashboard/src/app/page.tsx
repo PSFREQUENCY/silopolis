@@ -944,23 +944,24 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
                     → NEXT HB
                   </span>
                 )}
-                {row.txLink && (
+                {(isSwap || row.txLink) && (
                   <a
-                    href={row.txLink}
+                    href={row.txLink || "https://www.oklink.com/x-layer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/aa"}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
                       fontFamily: "'JetBrains Mono', monospace",
                       fontSize: "0.6rem", fontWeight: 800, flexShrink: 0,
                       padding: "2px 8px", letterSpacing: "0.1em",
-                      color: "#22c55e", border: "1px solid rgba(34,197,94,0.45)",
-                      background: "rgba(34,197,94,0.08)",
+                      color: row.txLink ? "#22c55e" : "#DAA520",
+                      border: `1px solid ${row.txLink ? "rgba(34,197,94,0.45)" : "rgba(218,165,32,0.35)"}`,
+                      background: row.txLink ? "rgba(34,197,94,0.08)" : "rgba(218,165,32,0.06)",
                       textDecoration: "none",
-                      boxShadow: "0 0 8px rgba(34,197,94,0.2)",
-                      textShadow: "0 0 8px #22c55e80",
+                      boxShadow: row.txLink ? "0 0 8px rgba(34,197,94,0.2)" : "none",
+                      textShadow: row.txLink ? "0 0 8px #22c55e80" : "none",
                     }}
                   >
-                    ⬡ TX ↗
+                    {row.txLink ? "⬡ TX ↗" : "⬡ WALLET ↗"}
                   </a>
                 )}
               </div>
