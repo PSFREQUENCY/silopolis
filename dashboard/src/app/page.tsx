@@ -646,9 +646,12 @@ function actionColor(action: string): { color: string; icon: string; pulse?: boo
   return map[action] ?? { color: "#4A3A22", icon: "·" };
 }
 
+type OnchainTrade = { tx_hash: string; tx_link: string; from_token: string; to_token: string; amount_in: string; amount_out: string; ts: string; verified: boolean };
+
 function TradeFeed({ apiBase }: { apiBase: string }) {
   const [feed, setFeed] = useState<FeedRow[]>([]);
   const [hbHistory, setHbHistory] = useState<Array<{ id: string; started_at: string; agents_run: number; actions_taken: number; elapsed_sec: number }>>([]);
+  const [onchainTrades, setOnchainTrades] = useState<OnchainTrade[]>([]);
 
   useEffect(() => {
     const loadFeed = async () => {
@@ -683,9 +686,21 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
         }
       } catch {}
     };
+    const loadOnchainProof = async () => {
+      try {
+        const r = await fetch(`${apiBase}/api/onchain-proof?limit=50`, { headers: FETCH_HEADERS });
+        if (r.ok) {
+          const data = await r.json();
+          if (Array.isArray(data.trades) && data.trades.length > 0) {
+            setOnchainTrades(data.trades);
+          }
+        }
+      } catch {}
+    };
     loadFeed();
     loadHb();
-    const iv = setInterval(() => { loadFeed(); loadHb(); }, 30_000);
+    loadOnchainProof();
+    const iv = setInterval(() => { loadFeed(); loadHb(); loadOnchainProof(); }, 30_000);
     return () => clearInterval(iv);
   }, [apiBase]);
 
@@ -733,7 +748,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
             fontWeight: 800, letterSpacing: "0.25em", color: "#22c55e",
             textShadow: "0 0 12px #22c55e80",
           }}>
-            ⬡ ON-CHAIN PROOF — {swapRows.length} TRADES{verifiedTxs.length > 0 ? ` · ${verifiedTxs.length} VERIFIED` : ""}
+            ⬡ ON-CHAIN PROOF — {onchainTrades.length > 0 ? `${onchainTrades.length} VERIFIED ON X LAYER` : `${swapRows.length} TRADES${verifiedTxs.length > 0 ? ` · ${verifiedTxs.length} VERIFIED` : ""}`}
           </span>
           <span style={{ marginLeft: "auto", color: "#22c55e", fontSize: "0.7rem", opacity: 0.6 }}>
             {txOpen ? "▲" : "▼"}
@@ -742,7 +757,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
 
         {txOpen && (
           <div style={{ padding: "10px 20px 14px" }}>
-            {swapRows.length === 0 ? (
+            {onchainTrades.length === 0 && swapRows.length === 0 ? (
               <div className="animate-pulse" style={{
                 fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
                 color: "#22c55e", padding: "8px 0", opacity: 0.6,
@@ -750,7 +765,56 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
               }}>
                 ◈ INCOMING DATA · TX LOADING...
               </div>
+            ) : onchainTrades.length > 0 ? (
+              /* ── Real on-chain trades from OnchainOS DEX history ── */
+              <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: "14rem", overflowY: "auto", scrollbarWidth: "thin", scrollbarColor: "#1A3A1A #080604" }}>
+                {onchainTrades.map((trade, i) => (
+                  <a
+                    key={i}
+                    href={trade.tx_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "7px 12px",
+                      background: "rgba(34,197,94,0.06)",
+                      border: "1px solid rgba(34,197,94,0.3)",
+                      textDecoration: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.78rem", flexShrink: 0, color: "#22c55e" }}>⬡</span>
+                    <span style={{
+                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.62rem",
+                      fontWeight: 700, color: "#DAA520", letterSpacing: "0.1em", flexShrink: 0,
+                    }}>
+                      {trade.from_token} → {trade.to_token}
+                    </span>
+                    <span style={{
+                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.56rem",
+                      color: "#3A5A3A",
+                      flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {trade.tx_hash.slice(0, 20)}…
+                    </span>
+                    <span style={{
+                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.56rem",
+                      color: "#4A4A2A", flexShrink: 0,
+                    }}>
+                      {trade.ts.slice(11, 16)}
+                    </span>
+                    <span style={{
+                      fontFamily: "'JetBrains Mono', monospace", fontSize: "0.58rem",
+                      fontWeight: 800, flexShrink: 0, letterSpacing: "0.08em",
+                      color: "#22c55e", textShadow: "0 0 8px #22c55e",
+                    }}>
+                      ⬡ VERIFY ↗
+                    </span>
+                  </a>
+                ))}
+              </div>
             ) : (
+              /* ── Fallback: DB feed rows (tx_hash may be missing) ── */
               <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: "14rem", overflowY: "auto", scrollbarWidth: "thin", scrollbarColor: "#1A3A1A #080604" }}>
                 {swapRows.map((row, i) => {
                   const verified = !!row.txLink;

@@ -267,7 +267,7 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
           setRecentTxs(txItems.slice(0, 4).map(f => ({
             agent: f.agent.replace("SILO-", ""),
             action: f.action,
-            txLink: `https://www.oklink.com/xlayer/tx/${f.tx_hash}`,
+            txLink: `https://www.oklink.com/x-layer/tx/${f.tx_hash}`,
             txHash: f.tx_hash!,
             ts: f.ts,
           })));
@@ -281,7 +281,7 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
             const col = agentPath.color;
             const shortAgent = newest.agent.replace("SILO-", "");
             const txLink = newest.tx_hash && newest.tx_hash !== "DRY_RUN"
-              ? `https://www.oklink.com/xlayer/tx/${newest.tx_hash}` : undefined;
+              ? `https://www.oklink.com/x-layer/tx/${newest.tx_hash}` : undefined;
             const txHash = newest.tx_hash && newest.tx_hash !== "DRY_RUN" ? newest.tx_hash : undefined;
             agentPath.path.forEach((nodeId, idx) => {
               setTimeout(() => {
@@ -561,7 +561,11 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
       txMeshNodesRef.current = visibleItems.map(tx => {
         const stableKey = tx.tx_hash || `${tx.ts}_${tx.agent}`;
         const pos = txPositionMapRef.current.get(stableKey) ?? { xf: 0.5, yf: 0.5, pulsePhase: 0 };
-        const validTxLink = tx.tx_hash ? `https://www.oklink.com/xlayer/tx/${tx.tx_hash}` : undefined;
+        // Use per-tx OKLink link when tx_hash available; fall back to wallet address page
+        const WALLET = "0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d";
+        const validTxLink = tx.tx_hash
+          ? `https://www.oklink.com/x-layer/tx/${tx.tx_hash}`
+          : `https://www.oklink.com/x-layer/address/${WALLET}/aa`;
         return {
           x: pos.xf * W,
           y: pos.yf * H,

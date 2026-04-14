@@ -591,7 +591,7 @@ def cipher_feed(limit: int = 20):
                 except Exception:
                     pass
             tx = row["tx_hash"] if hasattr(row, "keys") else None
-            tx_link = f"https://www.oklink.com/xlayer/tx/{tx}" if tx and tx not in ("DRY_RUN", "", None) else None
+            tx_link = f"https://www.oklink.com/x-layer/tx/{tx}" if tx and tx not in ("DRY_RUN", "", None) else None
             feed.append({
                 "ts": ts,
                 "agent": name,
@@ -608,6 +608,84 @@ def cipher_feed(limit: int = 20):
     except Exception as e:
         logger.error("Feed error: %s", e)
         return {"feed": [], "error": str(e)}
+
+
+@app.get("/api/onchain-proof")
+def onchain_proof(limit: int = 50):
+    """
+    Pull real on-chain DEX transactions directly from OnchainOS for the
+    agentic wallet. Returns verified TX hashes with live OKLink explorer links.
+    This is the authoritative source of truth — bypasses SQLite tx_hash gaps.
+    """
+    import os as _os
+    from onchainos import cli as _cli
+
+    wallet = _os.environ.get("AGENT_WALLET_ADDRESS", "")
+    if not wallet:
+        return {"trades": [], "error": "no wallet address configured"}
+
+    try:
+        hist = _cli.wallet_dex_history(address=wallet, limit=limit)
+        logger.debug("onchain-proof raw: %s", str(hist)[:400])
+
+        # Normalise across possible response shapes from the CLI
+        data = hist.get("data") or hist
+        tx_list = (
+            data.get("transactions") or data.get("txList") or
+            data.get("dexTransactions") or data.get("items") or
+            []
+        )
+
+        if not isinstance(tx_list, list):
+            tx_list = []
+
+        trades = []
+        for item in tx_list:
+            if not isinstance(item, dict):
+                continue
+            tx_hash = (
+                item.get("txHash") or item.get("tx_hash") or
+                item.get("hash") or item.get("transactionHash") or ""
+            )
+            if not tx_hash:
+                continue
+
+            # Normalise field names across CLI response variants
+            from_sym  = (item.get("fromTokenSymbol") or item.get("from_token") or
+                         item.get("sellTokenSymbol") or "?")
+            to_sym    = (item.get("toTokenSymbol") or item.get("to_token") or
+                         item.get("buyTokenSymbol") or "?")
+            amount    = (str(item.get("fromTokenAmount") or item.get("amount") or ""))
+            amount_out = (str(item.get("toTokenAmount") or item.get("amountOut") or ""))
+            ts_raw    = (item.get("txTime") or item.get("timestamp") or
+                         item.get("blockTime") or "")
+            try:
+                import datetime as _dt
+                # txTime may be epoch ms or ISO string
+                if str(ts_raw).isdigit():
+                    ts = _dt.datetime.utcfromtimestamp(int(ts_raw) / 1000).strftime("%Y-%m-%dT%H:%M:%SZ")
+                else:
+                    ts = str(ts_raw)[:20] + "Z"
+            except Exception:
+                ts = str(ts_raw)
+
+            trades.append({
+                "tx_hash": tx_hash,
+                "tx_link": f"https://www.oklink.com/x-layer/tx/{tx_hash}",
+                "from_token": from_sym,
+                "to_token": to_sym,
+                "amount_in": amount,
+                "amount_out": amount_out,
+                "ts": ts,
+                "verified": True,
+            })
+
+        return {"trades": trades, "wallet": wallet, "count": len(trades)}
+
+    except Exception as e:
+        logger.error("onchain-proof error: %s", e)
+        # Return empty — UI handles gracefully
+        return {"trades": [], "wallet": wallet, "error": str(e), "count": 0}
 
 
 @app.get("/api/prices")

@@ -226,12 +226,46 @@ def execute_swap(
         slippage_pct = str(slippage_bps / 100)
         raw = onchainos.swap_execute(from_token, to_token, amount,
                                      chain="xlayer", slippage=slippage_pct)
-        if raw.get("ok") or raw.get("txHash") or raw.get("data", {}).get("txHash"):
-            data = raw.get("data", raw)
-            tx = data.get("txHash") or data.get("transactionHash", "")
-            return SwapResult(success=True, tx_hash=tx,
-                              amount_out=str(data.get("toTokenAmount", "")))
-        return SwapResult(success=False, error=raw.get("error", "swap failed"))
+        logger.info("onchainos swap_execute raw response: %s", json.dumps(raw)[:500])
+
+        # Determine success
+        success = raw.get("ok") or raw.get("success") or raw.get("txHash") or \
+                  raw.get("data", {}).get("txHash") or raw.get("data", {}).get("hash")
+
+        if success:
+            data = raw.get("data") or raw
+            # Search every possible key the CLI might use for the transaction hash
+            tx = (
+                raw.get("txHash") or raw.get("tx_hash") or raw.get("hash") or
+                raw.get("transactionHash") or raw.get("transaction_hash") or
+                data.get("txHash") or data.get("tx_hash") or data.get("hash") or
+                data.get("transactionHash") or data.get("transaction_hash") or
+                data.get("result", {}).get("txHash") or data.get("result", {}).get("hash") or
+                ""
+            )
+
+            # Fallback: if the CLI gave no hash but swap succeeded,
+            # fetch the most recent DEX tx from the wallet's on-chain history
+            if not tx:
+                try:
+                    hist = onchainos.wallet_dex_history(limit=1)
+                    txs = (hist.get("data") or {}).get("transactions") or \
+                          (hist.get("data") or {}).get("txList") or \
+                          hist.get("transactions") or hist.get("txList") or []
+                    if txs:
+                        first = txs[0] if isinstance(txs, list) else {}
+                        tx = (first.get("txHash") or first.get("tx_hash") or
+                              first.get("hash") or first.get("transactionHash") or "")
+                        if tx:
+                            logger.info("onchainos swap tx_hash recovered from DEX history: %s", tx)
+                except Exception as hist_err:
+                    logger.debug("DEX history fallback failed: %s", hist_err)
+
+            amount_out = str(data.get("toTokenAmount") or data.get("amountOut") or
+                             data.get("amount_out") or "")
+            return SwapResult(success=True, tx_hash=tx, amount_out=amount_out)
+
+        return SwapResult(success=False, error=raw.get("error", raw.get("msg", "swap failed")))
 
     return SwapResult(success=False, error=f"chain {chain_id} not yet supported for live execution")
 

@@ -755,10 +755,11 @@ def run_heartbeat() -> dict:
             all_outcomes.append({"agent": name, **outcome})
 
             # Update decision outcome — capture tx_hash if on-chain swap occurred
+            _tx = outcome.get("tx_hash")
             memory.update_decision_outcome(
                 decision_id,
                 outcome.get("outcome", "unknown"),
-                tx_hash=outcome.get("tx_hash") or None,
+                tx_hash=_tx if _tx and _tx != "DRY_RUN" else None,
             )
 
             # Learn
