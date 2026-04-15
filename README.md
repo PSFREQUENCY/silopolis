@@ -42,6 +42,8 @@
 
 **Verify trades on-chain:** [Agentic Wallet on OKLink ↗](https://www.oklink.com/x-layer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/aa)
 
+**Verify EIP-7702 delegation:** [0xe40ccb2d...5796fa4 ↗](https://www.oklink.com/x-layer/address/0xe40ccb2d94975c51bff0c004efdfd9b3a5796fa4)
+
 ---
 
 ## What We Built
@@ -285,8 +287,15 @@ The MCP layer gives Gemini 2.5 direct access to X Layer DEX state, wallet balanc
 | **SkillMarket** | `0x60d5709B6Eec045306509a5b91c83296CEED325f` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x60d5709B6Eec045306509a5b91c83296CEED325f) |
 | **SiloToken (SILO)** | `0x7B248c459675A4bF19007B97d1FC49993A76e71C` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x7B248c459675A4bF19007B97d1FC49993A76e71C) |
 
-**Agentic Wallet** (TEE-secured — OnchainOS signs all transactions, no private key in code):
-[`0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d`](https://www.oklink.com/x-layer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/aa)
+**Agentic Wallet** (ERC-4337 + EIP-7702, TEE-secured — OnchainOS signs all transactions, no private key in code):
+
+| | Address | Link |
+|-|---------|------|
+| **Wallet (ERC-4337 AA)** | `0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/aa) |
+| **EIP-7702 Delegate** | `0xe40ccb2d94975c51bff0c004efdfd9b3a5796fa4` | [OKLink ↗](https://www.oklink.com/x-layer/address/0xe40ccb2d94975c51bff0c004efdfd9b3a5796fa4) |
+| **ERC-4337 EntryPoint** | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) |
+
+The EIP-7702 delegate is the OnchainOS TEE implementation contract — our wallet **sets this as its execution logic on every cycle**, enabling atomic multi-step UserOps (approve → multi-hop swap → settlement) without ever exposing a private key. [See delegation TX ↗](https://www.oklink.com/x-layer/tx/0x5bd57f0e817b462895662021cf3245f094a3cc1bf8180f24b78c6f6fd0e545eb)
 
 ---
 
