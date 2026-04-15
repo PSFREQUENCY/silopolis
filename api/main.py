@@ -790,15 +790,23 @@ def cipher_feed(limit: int = 20):
         return {"feed": [], "error": str(e)}
 
 
+_proof_cache: dict = {"data": None, "ts": 0.0}
+_PROOF_CACHE_TTL = 45  # seconds
+
 @app.get("/api/onchain-proof")
 def onchain_proof(limit: int = 50):
     """
     Pull real on-chain DEX transactions directly from OnchainOS for the
     agentic wallet. Returns verified TX hashes with live OKLink explorer links.
     This is the authoritative source of truth — bypasses SQLite tx_hash gaps.
+    Cached 45s to avoid hammering OnchainOS.
     """
-    import os as _os
+    import os as _os, time as _time
     from onchainos import cli as _cli
+
+    now = _time.time()
+    if _proof_cache["data"] and now - _proof_cache["ts"] < _PROOF_CACHE_TTL:
+        return _proof_cache["data"]
 
     wallet = _os.environ.get("AGENT_WALLET_ADDRESS", "")
     if not wallet:
@@ -860,12 +868,15 @@ def onchain_proof(limit: int = 50):
                 "verified": True,
             })
 
-        return {"trades": trades, "wallet": wallet, "count": len(trades)}
-
+        result = {"trades": trades, "count": len(trades), "wallet": wallet}
+        _proof_cache["data"] = result
+        _proof_cache["ts"] = now
+        return result
     except Exception as e:
         logger.error("onchain-proof error: %s", e)
-        # Return empty — UI handles gracefully
-        return {"trades": [], "wallet": wallet, "error": str(e), "count": 0}
+        if _proof_cache["data"]:
+            return _proof_cache["data"]
+        return {"trades": [], "error": str(e)}
 
 
 @app.get("/api/prices")
@@ -1039,9 +1050,16 @@ def silo_rewards(address: str):
         return {"error": str(e), "address": address}
 
 
+_wallet_cache: dict = {"data": None, "ts": 0.0}
+_WALLET_CACHE_TTL = 60  # seconds
+
 @app.get("/api/wallet")
 def wallet_balances():
-    """Return live token balances for the agentic wallet via OnchainOS."""
+    """Return live token balances for the agentic wallet via OnchainOS. Cached 60s."""
+    import time as _time
+    now = _time.time()
+    if _wallet_cache["data"] and now - _wallet_cache["ts"] < _WALLET_CACHE_TTL:
+        return _wallet_cache["data"]
     try:
         from onchainos import cli as _cli
         result = _cli.portfolio_balances()
@@ -1061,15 +1079,20 @@ def wallet_balances():
             if bal > 0:
                 balances[sym] = bal
                 usd_values[sym] = usd
-        return {
+        payload = {
             "ok": True,
             "wallet": os.environ.get("AGENT_WALLET_ADDRESS", ""),
             "balances": balances,
             "usd_values": usd_values,
             "total_usd": sum(usd_values.values()),
         }
+        _wallet_cache["data"] = payload
+        _wallet_cache["ts"] = now
+        return payload
     except Exception as e:
         logger.error("wallet_balances error: %s", e)
+        if _wallet_cache["data"]:
+            return _wallet_cache["data"]  # return stale on error
         return {"ok": False, "balances": {}, "usd_values": {}, "total_usd": 0, "error": str(e)}
 
 

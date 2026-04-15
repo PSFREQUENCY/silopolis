@@ -735,7 +735,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
     loadFeed();
     loadHb();
     loadOnchainProof();
-    const iv = setInterval(() => { loadFeed(); loadHb(); loadOnchainProof(); }, 30_000);
+    const iv = setInterval(() => { loadFeed(); loadHb(); loadOnchainProof(); }, 15_000);
     return () => clearInterval(iv);
   }, [apiBase]);
 
@@ -1061,24 +1061,16 @@ export default function SilopolisPage() {
   const refresh = useCallback(async () => {
     try {
       const opts = { headers: FETCH_HEADERS };
-      const [lb, st, pr, wl] = await Promise.all([
+      const [lb, st, pr] = await Promise.all([
         fetch(`${API_BASE}/api/leaderboard`, opts).then(r => r.json()),
         fetch(`${API_BASE}/api/status`, opts).then(r => r.json()),
         fetch(`${API_BASE}/api/prices`, opts).then(r => r.ok ? r.json() : null),
-        fetch(`${API_BASE}/api/wallet`, opts).then(r => r.ok ? r.json() : null),
       ]);
       const list: Agent[] = lb.leaderboard ?? DEMO_AGENTS;
       setAgents(list);
       setStatus(st);
       setTotalTx(list.reduce((s, a) => s + a.tx_count, 0));
       if (pr?.prices?.OKB) setOkbPrice(pr.prices.OKB);
-      if (wl?.balances) {
-        const b = wl.balances as Record<string, number>;
-        const u = (wl.usd_values ?? {}) as Record<string, number>;
-        setWalletBal(b);
-        setWalletUsd(u);
-        setOkbBalance(b["OKB"] ?? 0);
-      }
     } catch {
       setAgents(DEMO_AGENTS);
       setTotalTx(DEMO_AGENTS.reduce((s, a) => s + a.tx_count, 0));
@@ -1086,66 +1078,76 @@ export default function SilopolisPage() {
       setLoading(false);
       setLastRefresh(new Date());
     }
+    // Fire wallet fetch independently — OnchainOS can be slow, don't block main refresh
+    fetch(`${API_BASE}/api/wallet`, { headers: FETCH_HEADERS })
+      .then(r => r.ok ? r.json() : null)
+      .then(wl => {
+        if (wl?.balances) {
+          const b = wl.balances as Record<string, number>;
+          const u = (wl.usd_values ?? {}) as Record<string, number>;
+          setWalletBal(b);
+          setWalletUsd(u);
+          setOkbBalance(b["OKB"] ?? 0);
+        }
+      })
+      .catch(() => {});
   }, []); // eslint-disable-line
 
   // Load feed history for brain mesh:
   // Base layer = agent decisions from DB (every reasoning event = neural activity)
   // On-chain TXs from onchain-proof overlaid as golden confirmed nodes
   const loadFeedHistory = useCallback(async () => {
+    const opts = { headers: FETCH_HEADERS };
+
+    // ── Phase 1: DB feed — fast (SQLite), set immediately so brain mesh shows now
     try {
-      const opts = { headers: FETCH_HEADERS };
-      const [feedRes, proofRes] = await Promise.allSettled([
-        fetch(`${API_BASE}/api/feed?limit=500`, opts).then(r => r.ok ? r.json() : null),
-        fetch(`${API_BASE}/api/onchain-proof?limit=500`, opts).then(r => r.ok ? r.json() : null),
-      ]);
-
-      const feedData  = feedRes.status  === "fulfilled" ? feedRes.value  : null;
-      const proofData = proofRes.status === "fulfilled" ? proofRes.value : null;
-
-      // On-chain confirmed TXs — golden nodes, highest priority
-      const confirmedHashes = new Set<string>();
-      const proofItems: TxHistoryItem[] = [];
-      if (Array.isArray(proofData?.trades)) {
-        for (const t of proofData.trades) {
-          if (!t.tx_hash) continue;
-          confirmedHashes.add(t.tx_hash);
-          proofItems.push({
-            ts: t.ts ?? new Date().toISOString(),
-            agent: "SILO-TRADER-1",
-            action: `${t.from_token ?? "?"}→${t.to_token ?? "?"}`,
-            tx_hash: t.tx_hash,
-            color: "#FFD700",   // gold = on-chain confirmed
-            is_x402: false,
-          });
-        }
-      }
-
-      // DB decisions — neural activity nodes (agent reasoning events)
-      const feedItems: TxHistoryItem[] = [];
+      const feedData = await fetch(`${API_BASE}/api/feed?limit=300`, opts)
+        .then(r => r.ok ? r.json() : null);
       const rawFeed: { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string }[] =
         (feedData?.feed ?? []).slice().reverse();
-      for (const f of rawFeed) {
-        // Skip items already represented as on-chain proof
-        if (f.tx_hash && confirmedHashes.has(f.tx_hash)) continue;
-        feedItems.push({
+      if (rawFeed.length > 0) {
+        const feedItems: TxHistoryItem[] = rawFeed.map(f => ({
           ts: f.ts,
           agent: f.agent,
           action: f.action,
           tx_hash: (f.tx_hash && f.tx_hash !== "DRY_RUN") ? f.tx_hash : undefined,
           color: AGENT_COLORS[f.agent] ?? "#4A3A22",
           is_x402: f.agent === "SILO-SKILL-3" || (f.reasoning ?? "").toLowerCase().includes("x402"),
+        }));
+        setFeedHistory(feedItems);
+        setTimelineIdx(feedItems.length - 1);
+      }
+    } catch { /* keep existing */ }
+
+    // ── Phase 2: On-chain proof — slower (OnchainOS), overlay gold nodes on top
+    try {
+      const proofData = await fetch(`${API_BASE}/api/onchain-proof?limit=100`, opts)
+        .then(r => r.ok ? r.json() : null);
+      if (!Array.isArray(proofData?.trades) || proofData.trades.length === 0) return;
+
+      const confirmedHashes = new Set<string>();
+      const proofItems: TxHistoryItem[] = [];
+      for (const t of proofData.trades) {
+        if (!t.tx_hash) continue;
+        confirmedHashes.add(t.tx_hash);
+        proofItems.push({
+          ts: t.ts ?? new Date().toISOString(),
+          agent: "SILO-TRADER-1",
+          action: `${t.from_token ?? "?"}→${t.to_token ?? "?"}`,
+          tx_hash: t.tx_hash,
+          color: "#FFD700",
+          is_x402: false,
         });
       }
 
-      // Proof items first (oldest on-chain), then decisions
-      const merged = [...proofItems, ...feedItems];
-      if (merged.length > 0) {
-        setFeedHistory(merged);
+      // Merge: proof items first, then DB items (deduplicated)
+      setFeedHistory(prev => {
+        const dbItems = prev.filter(f => !f.tx_hash || !confirmedHashes.has(f.tx_hash));
+        const merged = [...proofItems, ...dbItems];
         setTimelineIdx(merged.length - 1);
-      }
-    } catch {
-      // keep existing
-    }
+        return merged;
+      });
+    } catch { /* keep existing feed */ }
   }, []); // eslint-disable-line
 
   useEffect(() => {
@@ -1153,8 +1155,8 @@ export default function SilopolisPage() {
     loadFeedHistory();
     // Classified flicker on mount
     setTimeout(() => setClassified(true), 300);
-    const iv  = setInterval(refresh, 30_000);
-    const iv2 = setInterval(loadFeedHistory, 15_000); // refresh brain mesh every 15s
+    const iv  = setInterval(refresh, 15_000);
+    const iv2 = setInterval(loadFeedHistory, 10_000); // refresh brain mesh every 10s
     return () => { clearInterval(iv); clearInterval(iv2); };
   }, [refresh, loadFeedHistory]);
 
