@@ -1039,6 +1039,40 @@ def silo_rewards(address: str):
         return {"error": str(e), "address": address}
 
 
+@app.get("/api/wallet")
+def wallet_balances():
+    """Return live token balances for the agentic wallet via OnchainOS."""
+    try:
+        from onchainos import cli as _cli
+        result = _cli.portfolio_balances()
+        details = result.get("data", {}).get("details", [])
+        tokens = []
+        for acc in details:
+            tokens.extend(acc.get("tokenAssets", []))
+        balances: dict[str, float] = {}
+        usd_values: dict[str, float] = {}
+        for t in tokens:
+            sym = (t.get("customSymbol") or t.get("symbol") or "?").upper()
+            # Normalise symbol aliases
+            if sym in ("USD₮0", "USDT0", "USDTE"):
+                sym = "USDT0"
+            bal = float(t.get("balance") or 0)
+            usd = float(t.get("usdValue") or 0)
+            if bal > 0:
+                balances[sym] = bal
+                usd_values[sym] = usd
+        return {
+            "ok": True,
+            "wallet": os.environ.get("AGENT_WALLET_ADDRESS", ""),
+            "balances": balances,
+            "usd_values": usd_values,
+            "total_usd": sum(usd_values.values()),
+        }
+    except Exception as e:
+        logger.error("wallet_balances error: %s", e)
+        return {"ok": False, "balances": {}, "usd_values": {}, "total_usd": 0, "error": str(e)}
+
+
 @app.get("/health")
 def health():
     return {"ok": True}

@@ -56,6 +56,7 @@ XLAYER_TOKENS = {
 _XLAYER_SYMBOL_TO_ADDR: dict[str, str] = {
     "USDC":        "0x74b7f16337b8972027f6196a17a631ac6de26d22",
     "XLAYER_USDT": "0x1e4a5963abfd975d8c9021ce480b42188849d41d",
+    "SILO":        "0x7B248c459675A4bF19007B97d1FC49993A76e71C",
 }
 
 def _resolve_xlayer_token(token: str) -> str:

@@ -1001,6 +1001,8 @@ export default function SilopolisPage() {
   const [timelineIdx, setTimelineIdx] = useState<number>(9999); // large default → always shows all nodes until data loads
   const [okbPrice, setOkbPrice] = useState<number>(0);
   const [okbBalance, setOkbBalance] = useState<number>(0);
+  const [walletBal, setWalletBal] = useState<Record<string, number>>({});
+  const [walletUsd, setWalletUsd] = useState<Record<string, number>>({});
 
   // Real agent roster — mirrors actual SQLite data (83 cycles, 9 agents, 237 excavations)
   const DEMO_AGENTS: Agent[] = [
@@ -1027,18 +1029,24 @@ export default function SilopolisPage() {
   const refresh = useCallback(async () => {
     try {
       const opts = { headers: FETCH_HEADERS };
-      const [lb, st, pr, rk] = await Promise.all([
+      const [lb, st, pr, wl] = await Promise.all([
         fetch(`${API_BASE}/api/leaderboard`, opts).then(r => r.json()),
         fetch(`${API_BASE}/api/status`, opts).then(r => r.json()),
         fetch(`${API_BASE}/api/prices`, opts).then(r => r.ok ? r.json() : null),
-        fetch(`${API_BASE}/api/risk`, opts).then(r => r.ok ? r.json() : null),
+        fetch(`${API_BASE}/api/wallet`, opts).then(r => r.ok ? r.json() : null),
       ]);
       const list: Agent[] = lb.leaderboard ?? DEMO_AGENTS;
       setAgents(list);
       setStatus(st);
       setTotalTx(list.reduce((s, a) => s + a.tx_count, 0));
       if (pr?.prices?.OKB) setOkbPrice(pr.prices.OKB);
-      if (rk?.okb_balance != null) setOkbBalance(rk.okb_balance);
+      if (wl?.balances) {
+        const b = wl.balances as Record<string, number>;
+        const u = (wl.usd_values ?? {}) as Record<string, number>;
+        setWalletBal(b);
+        setWalletUsd(u);
+        setOkbBalance(b["OKB"] ?? 0);
+      }
     } catch {
       setAgents(DEMO_AGENTS);
       setTotalTx(DEMO_AGENTS.reduce((s, a) => s + a.tx_count, 0));
@@ -1048,34 +1056,61 @@ export default function SilopolisPage() {
     }
   }, []); // eslint-disable-line
 
-  // Load feed history for brain mesh — ONLY real on-chain TXs from onchain-proof
-  // DB decisions (analyze/forecast/patrol) go in the cipher feed text list, NOT the brain
+  // Load feed history for brain mesh:
+  // Base layer = agent decisions from DB (every reasoning event = neural activity)
+  // On-chain TXs from onchain-proof overlaid as golden confirmed nodes
   const loadFeedHistory = useCallback(async () => {
     try {
       const opts = { headers: FETCH_HEADERS };
-      const proofRes = await fetch(`${API_BASE}/api/onchain-proof?limit=500`, opts);
-      if (!proofRes.ok) return;
-      const proofData = await proofRes.json();
+      const [feedRes, proofRes] = await Promise.allSettled([
+        fetch(`${API_BASE}/api/feed?limit=500`, opts).then(r => r.ok ? r.json() : null),
+        fetch(`${API_BASE}/api/onchain-proof?limit=500`, opts).then(r => r.ok ? r.json() : null),
+      ]);
 
-      const txItems: TxHistoryItem[] = [];
+      const feedData  = feedRes.status  === "fulfilled" ? feedRes.value  : null;
+      const proofData = proofRes.status === "fulfilled" ? proofRes.value : null;
+
+      // On-chain confirmed TXs — golden nodes, highest priority
+      const confirmedHashes = new Set<string>();
+      const proofItems: TxHistoryItem[] = [];
       if (Array.isArray(proofData?.trades)) {
         for (const t of proofData.trades) {
           if (!t.tx_hash) continue;
-          txItems.push({
-            ts: t.ts,
+          confirmedHashes.add(t.tx_hash);
+          proofItems.push({
+            ts: t.ts ?? new Date().toISOString(),
             agent: "SILO-TRADER-1",
             action: `${t.from_token ?? "?"}→${t.to_token ?? "?"}`,
             tx_hash: t.tx_hash,
-            color: "#DAA520",
+            color: "#FFD700",   // gold = on-chain confirmed
             is_x402: false,
           });
         }
       }
 
-      // Oldest first so timeline advances left→right
-      txItems.reverse();
-      setFeedHistory(txItems);
-      setTimelineIdx(txItems.length - 1); // show latest
+      // DB decisions — neural activity nodes (agent reasoning events)
+      const feedItems: TxHistoryItem[] = [];
+      const rawFeed: { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string }[] =
+        (feedData?.feed ?? []).slice().reverse();
+      for (const f of rawFeed) {
+        // Skip items already represented as on-chain proof
+        if (f.tx_hash && confirmedHashes.has(f.tx_hash)) continue;
+        feedItems.push({
+          ts: f.ts,
+          agent: f.agent,
+          action: f.action,
+          tx_hash: (f.tx_hash && f.tx_hash !== "DRY_RUN") ? f.tx_hash : undefined,
+          color: AGENT_COLORS[f.agent] ?? "#4A3A22",
+          is_x402: f.agent === "SILO-SKILL-3" || (f.reasoning ?? "").toLowerCase().includes("x402"),
+        });
+      }
+
+      // Proof items first (oldest on-chain), then decisions
+      const merged = [...proofItems, ...feedItems];
+      if (merged.length > 0) {
+        setFeedHistory(merged);
+        setTimelineIdx(merged.length - 1);
+      }
     } catch {
       // keep existing
     }
@@ -1415,7 +1450,7 @@ export default function SilopolisPage() {
         </div>
 
         {/* Timeline slider */}
-        {feedHistory.length > 1 && (
+        {feedHistory.length > 0 && (
           <div className="absolute z-20 inset-x-0 flex flex-col items-center" style={{ bottom: 68 }}>
             <div className="px-6 py-3 backdrop-blur-sm w-full max-w-2xl mx-auto"
               style={{ background: "rgba(5,4,2,0.88)", border: "1px solid rgba(218,165,32,0.12)" }}>
@@ -1570,66 +1605,87 @@ export default function SilopolisPage() {
           </div>
 
           {/* Portfolio allocation bars — one per token */}
-          <div className="grid gap-4 md:grid-cols-4">
-            {PORTFOLIO_BASKET.map((t) => {
-              const isOKB = t.symbol === "OKB";
-              const balance = isOKB ? okbBalance : 0;
-              const usdVal  = isOKB && okbPrice > 0 ? okbBalance * okbPrice : 0;
-              const totalPortfolioUsd = okbPrice > 0 ? okbBalance * okbPrice / 0.50 : 0; // estimate from OKB at 50%
-              const targetUsd = totalPortfolioUsd * (t.pct / 100);
-              const currentPct = targetUsd > 0 && isOKB ? Math.min(100, (usdVal / targetUsd) * 100) : (isOKB ? 0 : 0);
-              return (
-                <div key={t.symbol}
-                  style={{
-                    background: "#0A0806",
-                    border: `1px solid ${t.color}30`,
-                    padding: "20px 16px",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                >
-                  {/* Glow strip top */}
-                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: t.color, opacity: 0.6 }} />
-
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="text-xl font-black font-mono" style={{ color: t.color }}>{t.symbol}</div>
-                      <div className="text-xs font-mono mt-0.5" style={{ color: "#4A3A22" }}>{t.desc}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-black font-mono" style={{ color: "#DAA520" }}>{t.pct}%</div>
-                      <div className="text-xs font-mono" style={{ color: "#4A3A22" }}>TARGET</div>
-                    </div>
-                  </div>
-
-                  {/* Allocation bar */}
-                  <div style={{ background: "#1A1208", height: 6, borderRadius: 0, overflow: "hidden" }}>
-                    <div
+          {(() => {
+            // API returns "USDT" as display name for USDT0 (Bridged Tether)
+            const BAL_ALIAS: Record<string, string[]> = {
+              "USDT0": ["USDT0", "USDT", "USD₮0", "USDTE"],
+              "OKB":   ["OKB"],
+              "USDC":  ["USDC"],
+              "SILO":  ["SILO"],
+            };
+            const getBal  = (sym: string) => BAL_ALIAS[sym]?.map(k => walletBal[k] ?? 0).find(v => v > 0) ?? 0;
+            const getUsd  = (sym: string) => BAL_ALIAS[sym]?.map(k => walletUsd[k] ?? 0).find(v => v > 0) ?? 0;
+            const totalUsd = Object.values(walletUsd).reduce((s, v) => s + v, 0);
+            return (
+              <div className="grid gap-4 md:grid-cols-4">
+                {PORTFOLIO_BASKET.map((t) => {
+                  const bal     = getBal(t.symbol);
+                  const usdVal  = getUsd(t.symbol);
+                  const currentPct = totalUsd > 0 ? Math.min(100, (usdVal / totalUsd) * 100) : 0;
+                  const targetPct  = t.pct;
+                  const hasBalance = bal > 0;
+                  return (
+                    <div key={t.symbol}
                       style={{
-                        width: `${isOKB ? currentPct : 2}%`,
-                        height: "100%",
-                        background: t.color,
-                        boxShadow: `0 0 8px ${t.color}80`,
-                        transition: "width 1s ease",
-                        minWidth: "2%",
+                        background: "#0A0806",
+                        border: `1px solid ${t.color}${hasBalance ? "60" : "20"}`,
+                        padding: "20px 16px",
+                        position: "relative",
+                        overflow: "hidden",
                       }}
-                    />
-                  </div>
+                    >
+                      {/* Glow strip top */}
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: t.color, opacity: hasBalance ? 0.8 : 0.2 }} />
 
-                  {/* Balance */}
-                  <div className="mt-3 font-mono text-xs" style={{ color: "#6B5C3A" }}>
-                    {isOKB ? (
-                      <span>
-                        <span style={{ color: "#DAA520" }}>{balance.toFixed(6)}</span> OKB
-                        {usdVal > 0 && <span style={{ color: "#4A3A22" }}> · ${usdVal.toFixed(2)}</span>}
-                      </span>
-                    ) : (
-                      <span style={{ color: "#2A2018" }}>FUND WALLET TO ACCUMULATE</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <div className="text-xl font-black font-mono" style={{ color: t.color }}>{t.symbol}</div>
+                          <div className="text-xs font-mono mt-0.5" style={{ color: "#4A3A22" }}>{t.desc}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-black font-mono" style={{ color: "#DAA520" }}>{targetPct}%</div>
+                          <div className="text-xs font-mono" style={{ color: "#4A3A22" }}>TARGET</div>
+                        </div>
+                      </div>
+
+                      {/* Dual bar: target (dim) behind actual (lit) */}
+                      <div style={{ background: "#1A1208", height: 6, borderRadius: 0, overflow: "hidden", position: "relative" }}>
+                        {/* target ghost */}
+                        <div style={{ position: "absolute", top: 0, left: 0, width: `${targetPct}%`, height: "100%", background: `${t.color}22` }} />
+                        {/* actual */}
+                        <div style={{
+                          width: `${Math.max(currentPct, hasBalance ? 2 : 0)}%`,
+                          height: "100%",
+                          background: t.color,
+                          boxShadow: hasBalance ? `0 0 8px ${t.color}80` : "none",
+                          transition: "width 1.2s ease",
+                        }} />
+                      </div>
+                      <div className="flex justify-between mt-1" style={{ fontSize: "0.65rem", color: "#3A2C16" }}>
+                        <span>ACTUAL {currentPct.toFixed(1)}%</span>
+                        <span>TARGET {targetPct}%</span>
+                      </div>
+
+                      {/* Balance */}
+                      <div className="mt-2 font-mono" style={{ fontSize: "0.78rem", color: "#6B5C3A" }}>
+                        {hasBalance ? (
+                          <span>
+                            <span style={{ color: "#DAA520" }}>
+                              {t.symbol === "OKB" ? bal.toFixed(6) : bal.toFixed(4)}
+                            </span>
+                            {" "}{t.symbol}
+                            {usdVal > 0 && <span style={{ color: "#4A3A22" }}> · ${usdVal.toFixed(2)}</span>}
+                          </span>
+                        ) : (
+                          <span style={{ color: "#2A2018" }}>0.000000 {t.symbol}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
           </div>
 
           {/* Funding callout */}

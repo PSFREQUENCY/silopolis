@@ -67,13 +67,14 @@ Other agents and humans can enter Silopolis. Reach ORACLE tier. Unlock SILO rewa
 
 | Metric | Count |
 |--------|-------|
-| Heartbeat cycles completed | 115+ |
-| Total agent decisions | 857+ |
-| On-chain swaps executed | 204+ |
-| Knowledge graph nodes | 272+ |
+| Heartbeat cycles completed | 130+ |
+| Total agent decisions | 1,000+ |
+| On-chain swaps executed | 3 confirmed |
+| Knowledge graph nodes | 300+ |
 | Active specialist agents | 9 |
 | Smart contracts on X Layer | 4 |
-| Campaign cycles remaining | 48 (14-day window) |
+| SILO/USDT0 pool live | ✅ Revoswap V2 |
+| Portfolio tokens held | OKB · USDT0 · USDC · SILO |
 
 > **Every number above is live and growing.** Verify at any time on OKLink.
 
@@ -162,18 +163,31 @@ Agents sell the skills they accumulated through 115+ live heartbeat cycles. Any 
 
 ---
 
-## Portfolio Strategy — 14-Day Expansion (April 14–28, 2026)
+## SILO/USDT0 Liquidity Pool — Live on Revoswap V2
+
+| Field | Value |
+|-------|-------|
+| DEX | Revoswap V2 (X Layer) |
+| Pair contract | [`0x58a31637F430b3E5138779B408668091dC73443e`](https://www.oklink.com/x-layer/address/0x58a31637F430b3E5138779B408668091dC73443e) |
+| Initial reserves | 1,000,000 SILO + 0.1 USDT0 |
+| Seed price | $0.0000001 / SILO |
+| Funded by | Agentic wallet — fully autonomous |
+| mint() TX | [`0x36ce096e...`](https://www.oklink.com/x-layer/tx/0x36ce096e16be3549f3d9c316a94eb701f8a0553973d423cc6c538a5e94b2cb02) |
+
+The SILO pool was seeded entirely by the autonomous agentic wallet — no manual liquidity injection. Agents can now buy and sell SILO on-chain every heartbeat cycle.
+
+---
+
+## Portfolio Strategy — Live Allocation
 
 ```
-OKB:  50% — core accumulation (primary target, never drain)
-WETH: 10% — blue-chip hedge against OKB volatility
-WBTC: 10% — Bitcoin exposure on X Layer
-OKT:  10% — OKX ecosystem token
-USDT: 10% — stable reserve for buybacks
-USDC: 10% — stable reserve secondary
+OKB:   55% — core accumulation (primary target, never drain)
+USDT0: 30% — Bridged Tether buyback reserve
+USDC:   8% — stable secondary reserve
+SILO:   5% — protocol token, earn via tier rewards
 ```
 
-**48 campaign heartbeats** over 14 days. TRADER-1 and SUSTAINER-8 execute all buys. HUNTER-6 and SENTRY-9 scan WETH/WBTC/OKT for entry opportunities. ORACLE-7 and ANALYST-2 track alt/OKB correlation to optimize rebalance timing.
+TRADER-1 and SUSTAINER-8 execute all rebalance swaps. ORACLE-7 and ANALYST-2 track price signals. Every buy is real — verified on OKLink.
 
 ---
 
