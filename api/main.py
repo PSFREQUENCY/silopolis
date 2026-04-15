@@ -1096,6 +1096,30 @@ def wallet_balances():
         return {"ok": False, "balances": {}, "usd_values": {}, "total_usd": 0, "error": str(e)}
 
 
+@app.post("/api/campaign/start")
+def start_campaign(cycles: int = 336, mode: str = "aggressive_multitoken"):
+    """Reset and start the trading campaign. POST /api/campaign/start?cycles=336"""
+    import json, time as _t
+    from pathlib import Path
+    state_path = Path(__file__).parent.parent / "data" / "vault_state.json"
+    try:
+        state_path.parent.mkdir(exist_ok=True)
+        if state_path.exists():
+            with open(state_path) as f:
+                state = json.load(f)
+        else:
+            state = {}
+        state["campaign_cycles_remaining"] = cycles
+        state["campaign_mode"] = mode
+        state["daily_spent_okb"] = 0.0
+        state["day_start"] = _t.time()
+        with open(state_path, "w") as f:
+            json.dump(state, f, indent=2)
+        return {"ok": True, "campaign_cycles_remaining": cycles, "campaign_mode": mode}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @app.get("/health")
 def health():
     return {"ok": True}
