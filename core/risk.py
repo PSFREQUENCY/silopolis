@@ -150,9 +150,11 @@ class RiskGovernor:
     Every trade goes through this before execution.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, readonly: bool = False) -> None:
         self.state = load_vault_state()
-        self._fetch_balance()
+        self._readonly = readonly
+        if not readonly:
+            self._fetch_balance()
 
     def _fetch_balance(self) -> None:
         """Fetch live OKB balance — tries web3 RPC first, then OnchainOS CLI."""

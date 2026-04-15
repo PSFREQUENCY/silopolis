@@ -395,7 +395,7 @@ def swarm_knowledge(limit: int = 50):
 def risk_status():
     """Live vault risk profile — tier, balance, win rate, profit capture."""
     try:
-        rg = _RiskGovernor()
+        rg = _RiskGovernor(readonly=True)
         return rg.status_dict()
     except Exception as e:
         return {"error": str(e), "tier": "UNKNOWN"}
@@ -939,7 +939,7 @@ def daily_report():
         kg_count = conn.execute("SELECT COUNT(*) FROM knowledge_graph").fetchone()[0]
         conn.close()
 
-        rg = _RiskGovernor()
+        rg = _RiskGovernor(readonly=True)
         status = rg.status_dict()
 
         closed = []
