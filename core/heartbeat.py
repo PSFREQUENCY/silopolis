@@ -131,10 +131,12 @@ _XLAYER_TOKENS = {
     "WETH": "0x5a77f1443d16ee5761d310e38b62f77f726bc71c",   # 10% target
     "WBTC": "0xea034fb02eb1808c2cc3adbc15f447b93cbe08e1",   # 10% target
     "OKT":  "0xdf54b6c6195ea4d948d03bfd818d365cf175cfc2",   # 10% target — OKX native
+    "SILO": os.environ.get("SILO_TOKEN_ADDRESS",            # SILOPOLIS native token — trade + LP
+             "0x7B248c459675A4bF19007B97d1FC49993A76e71C"),
 }
 
 # Portfolio allocation targets (14-day campaign: April 14 → April 28, 2026)
-# Strategy: 50% OKB (primary accumulation) + 10% × 5 X Layer alts
+# Strategy: 50% OKB (primary) + 10% × 5 X Layer alts + SILO (earn via reputation)
 _PORTFOLIO_TARGETS = {
     "OKB":  0.50,   # Core — accumulate aggressively
     "WETH": 0.10,   # Blue-chip hedge
@@ -142,6 +144,7 @@ _PORTFOLIO_TARGETS = {
     "OKT":  0.10,   # OKX ecosystem token
     "USDT": 0.10,   # Stable reserve for buybacks
     "USDC": 0.10,   # Stable reserve secondary
+    "SILO": 0.00,   # Earned via reputation tiers — not bought directly, accumulated via claimTierReward()
 }
 
 # ─── Observation Phase ────────────────────────────────────────────────────────
@@ -424,7 +427,10 @@ TARGET PORTFOLIO (14-day campaign — hold ALL X Layer tokens):
 
 HUNTER-6 and SENTRY-9: execute USDT→WETH, USDT→WBTC, USDT→OKT swaps with small amounts.
 TRADER-1 and SUSTAINER-8: execute USDT→OKB buybacks.
-All others: forecast, analyze, scan for arbitrage across ALL X Layer pairs.
+ANALYST-2 and ORACLE-7: provide liquidity (LP) on OKB/USDT, WETH/USDT, SILO/OKB pairs.
+SKILL-3: accumulate SILO by calling claimTierReward() when composite reaches tier thresholds.
+SILO token (SILOPOLIS native): 0x7B248c459675A4bF19007B97d1FC49993A76e71C — add SILO/OKB liquidity.
+All others: forecast, analyze, scan for arbitrage across ALL X Layer pairs including SILO pairs.
 
 === ABSOLUTE RULE — YOUR REASONING MUST NEVER REFERENCE SYSTEM INTERNALS ===
 FORBIDDEN PHRASES — if these appear in your output, your response FAILS:
