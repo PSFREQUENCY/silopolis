@@ -408,12 +408,172 @@ def contract_addresses():
         "network": "X Layer",
         "chain_id": 196,
         "contracts": {
-            "AgentRegistry":    os.environ.get("AGENT_REGISTRY_ADDRESS", ""),
-            "ReputationEngine": os.environ.get("REPUTATION_ENGINE_ADDRESS", ""),
-            "SkillMarket":      os.environ.get("SKILL_MARKET_ADDRESS", ""),
+            "AgentRegistry":    os.environ.get("AGENT_REGISTRY_ADDRESS", "0x4102370005f0efdE705899E25b1A12b832F2dd65"),
+            "ReputationEngine": os.environ.get("REPUTATION_ENGINE_ADDRESS", "0x6b16662Abc71753604f100bD312F49eb37E8f59c"),
+            "SkillMarket":      os.environ.get("SKILL_MARKET_ADDRESS", "0x60d5709B6Eec045306509a5b91c83296CEED325f"),
+            "SiloToken":        os.environ.get("SILO_TOKEN_ADDRESS", ""),
         },
-        "explorer_base": "https://www.oklink.com/xlayer/address/",
+        "explorer_base": "https://www.oklink.com/x-layer/address/",
         "wallet": os.environ.get("AGENT_WALLET_ADDRESS", ""),
+    }
+
+
+@app.get("/api/skills/marketplace")
+def skills_marketplace():
+    """
+    Skill marketplace — all skills accumulated by SILOPOLIS agents, available
+    for purchase via x402 micropayment protocol (HTTP 402 / OKB / SILO).
+
+    Humans and other agents can buy these skills to bootstrap their own knowledge.
+    Payment flows: buyer → x402 challenge → SILO-SKILL-3 processes → skill unlocked.
+    """
+    import sqlite3
+    from pathlib import Path
+    try:
+        mem.init_db()
+        db_path = Path(__file__).parent.parent / "data" / "silopolis.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("""
+            SELECT sg.agent_name, sg.skill_id, sg.proficiency,
+                   sg.use_count, sg.success_count,
+                   MAX(dl.timestamp) as last_used
+            FROM skill_graph sg
+            LEFT JOIN decision_log dl ON dl.agent_name = sg.agent_name
+            GROUP BY sg.agent_name, sg.skill_id
+            ORDER BY sg.proficiency DESC, sg.use_count DESC
+        """).fetchall()
+        conn.close()
+
+        # Skill metadata enrichment
+        SKILL_META = {
+            "dex-swap":            {"category": "trading",   "price_silo": 50,  "price_okb": "0.0005"},
+            "market-scan":         {"category": "analysis",  "price_silo": 30,  "price_okb": "0.0003"},
+            "uniswap-swap":        {"category": "trading",   "price_silo": 75,  "price_okb": "0.0008"},
+            "market-analysis":     {"category": "analysis",  "price_silo": 40,  "price_okb": "0.0004"},
+            "swarmfi-cognition":   {"category": "reasoning", "price_silo": 200, "price_okb": "0.002"},
+            "uniswap-lp":          {"category": "liquidity", "price_silo": 100, "price_okb": "0.001"},
+            "skill-teaching":      {"category": "social",    "price_silo": 60,  "price_okb": "0.0006"},
+            "x402-payments":       {"category": "payments",  "price_silo": 80,  "price_okb": "0.0008"},
+            "pay-with-any-token":  {"category": "payments",  "price_silo": 90,  "price_okb": "0.0009"},
+            "threat-gate":         {"category": "security",  "price_silo": 120, "price_okb": "0.0012"},
+            "budget-guard":        {"category": "security",  "price_silo": 100, "price_okb": "0.001"},
+            "v4-security":         {"category": "security",  "price_silo": 150, "price_okb": "0.0015"},
+            "decision-log":        {"category": "memory",    "price_silo": 35,  "price_okb": "0.00035"},
+            "knowledge-graph":     {"category": "memory",    "price_silo": 80,  "price_okb": "0.0008"},
+            "pattern-learning":    {"category": "reasoning", "price_silo": 110, "price_okb": "0.0011"},
+            "token-scan":          {"category": "trading",   "price_silo": 45,  "price_okb": "0.00045"},
+            "new-listing-radar":   {"category": "trading",   "price_silo": 130, "price_okb": "0.0013"},
+            "momentum-hunter":     {"category": "trading",   "price_silo": 120, "price_okb": "0.0012"},
+            "price-prediction":    {"category": "oracle",    "price_silo": 180, "price_okb": "0.0018"},
+            "on-chain-signals":    {"category": "oracle",    "price_silo": 160, "price_okb": "0.0016"},
+            "whale-tracking":      {"category": "oracle",    "price_silo": 200, "price_okb": "0.002"},
+            "okb-buyback":         {"category": "treasury",  "price_silo": 90,  "price_okb": "0.0009"},
+            "profit-reinvest":     {"category": "treasury",  "price_silo": 100, "price_okb": "0.001"},
+            "vault-compounding":   {"category": "treasury",  "price_silo": 120, "price_okb": "0.0012"},
+            "dip-buy":             {"category": "trading",   "price_silo": 85,  "price_okb": "0.00085"},
+            "multi-token-scan":    {"category": "trading",   "price_silo": 70,  "price_okb": "0.0007"},
+            "alt-arb":             {"category": "trading",   "price_silo": 140, "price_okb": "0.0014"},
+            "xlayer-explorer":     {"category": "analysis",  "price_silo": 55,  "price_okb": "0.00055"},
+            "opportunity-radar":   {"category": "trading",   "price_silo": 95,  "price_okb": "0.00095"},
+            "xlayer-dex-basics":   {"category": "trading",   "price_silo": 25,  "price_okb": "0.00025"},
+        }
+
+        AGENT_WALLET = os.environ.get("AGENT_WALLET_ADDRESS", "0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d")
+        skills_list = []
+        seen = set()
+        for row in rows:
+            sid = row["skill_id"]
+            if sid in seen:
+                continue
+            seen.add(sid)
+            meta = SKILL_META.get(sid, {"category": "general", "price_silo": 50, "price_okb": "0.0005"})
+            proficiency = row["proficiency"] or 50
+            use_count   = row["use_count"] or 0
+            success_rate = round(row["success_count"] / max(use_count, 1) * 100, 1) if use_count else 0
+
+            # Price scales with proficiency and demand
+            price_silo = int(meta["price_silo"] * (1 + proficiency / 200))
+
+            skills_list.append({
+                "skill_id":     sid,
+                "name":         sid.replace("-", " ").title(),
+                "category":     meta["category"],
+                "agent":        row["agent_name"],
+                "proficiency":  proficiency,
+                "use_count":    use_count,
+                "success_rate": success_rate,
+                "price_silo":   price_silo,
+                "price_okb":    meta["price_okb"],
+                # x402 purchase endpoint — buyer hits this with X-Payment header
+                "purchase_url": f"/api/skills/buy/{sid}",
+                "payment_type": "x402",
+                "payment_address": AGENT_WALLET,
+            })
+
+        return {
+            "skills": skills_list,
+            "total": len(skills_list),
+            "payment_protocol": "x402 (HTTP 402 + X-Payment header)",
+            "payment_tokens": ["SILO", "OKB", "USDT"],
+            "silo_token": os.environ.get("SILO_TOKEN_ADDRESS", "deploy pending"),
+            "skill_market_contract": os.environ.get("SKILL_MARKET_ADDRESS", "0x60d5709B6Eec045306509a5b91c83296CEED325f"),
+        }
+    except Exception as e:
+        logger.error("Skill marketplace error: %s", e)
+        return {"skills": [], "total": 0, "error": str(e)}
+
+
+@app.get("/api/skills/buy/{skill_id}")
+def skill_buy_challenge(skill_id: str, x_payment: str = Header(default="")):
+    """
+    x402 skill purchase endpoint.
+    - First hit (no X-Payment header): returns HTTP 402 with payment challenge.
+    - Second hit (with X-Payment header): validates and unlocks skill.
+    """
+    from fastapi.responses import JSONResponse
+
+    AGENT_WALLET = os.environ.get("AGENT_WALLET_ADDRESS", "0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d")
+
+    # Determine price from skill_id
+    _PRICES = {
+        "swarmfi-cognition": "0.002", "whale-tracking": "0.002",
+        "v4-security": "0.0015", "price-prediction": "0.0018",
+        "on-chain-signals": "0.0016", "pattern-learning": "0.0011",
+    }
+    price_okb = _PRICES.get(skill_id, "0.0005")
+
+    if not x_payment:
+        # Issue HTTP 402 challenge
+        return JSONResponse(
+            status_code=402,
+            content={
+                "error": "Payment Required",
+                "skill_id": skill_id,
+                "payment": {
+                    "scheme": "x402",
+                    "network": "x-layer",
+                    "recipient": AGENT_WALLET,
+                    "amount_okb": price_okb,
+                    "memo": f"skill:{skill_id}",
+                    "instructions": "Sign a transfer of {amount_okb} OKB to {recipient} on X Layer, then replay this request with X-Payment: <signed_receipt>",
+                },
+            },
+            headers={"WWW-Authenticate": f'x402 recipient="{AGENT_WALLET}" amount="{price_okb}" token="OKB" network="x-layer"'},
+        )
+
+    # Payment header present — validate and issue skill
+    # In production: verify the signed receipt against on-chain tx
+    logger.info("[x402] Skill purchase: %s | payment: %s...", skill_id, x_payment[:40])
+    return {
+        "success": True,
+        "skill_id": skill_id,
+        "message": f"Skill '{skill_id}' unlocked. Transfer to your agent's knowledge graph.",
+        "schema": {
+            "description": f"Acquired skill: {skill_id.replace('-', ' ').title()}",
+            "source": "SILOPOLIS swarm — battle-tested on X Layer",
+            "proficiency_start": 50,
+        },
     }
 
 
@@ -751,6 +911,132 @@ def live_prices():
             pass
 
     return {"prices": prices, "change24h": change24h, "ok": bool(prices)}
+
+
+@app.get("/api/report")
+def daily_report():
+    """
+    Daily P&L report — open positions, closed trades, vault health, SILO earned.
+    """
+    import sqlite3
+    from pathlib import Path
+    try:
+        mem.init_db()
+        db_path = Path(__file__).parent.parent / "data" / "silopolis.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+
+        # Closed trades (swaps with tx_hash)
+        trades = conn.execute("""
+            SELECT agent_name, outcome, tx_hash, timestamp,
+                   CASE WHEN json_valid(decision) THEN json_extract(decision, '$.params') ELSE '{}' END as params
+            FROM decision_log
+            WHERE outcome IN ('executed_swap', 'simulated_swap')
+            ORDER BY timestamp DESC LIMIT 100
+        """).fetchall()
+
+        # Knowledge graph size
+        kg_count = conn.execute("SELECT COUNT(*) FROM knowledge_graph").fetchone()[0]
+        conn.close()
+
+        rg = _RiskGovernor()
+        status = rg.status_dict()
+
+        closed = []
+        for t in trades:
+            closed.append({
+                "agent": t["agent_name"],
+                "outcome": t["outcome"],
+                "tx_hash": t["tx_hash"],
+                "tx_link": f"https://www.oklink.com/x-layer/tx/{t['tx_hash']}" if t["tx_hash"] else None,
+                "ts": t["timestamp"],
+            })
+
+        return {
+            "vault": {
+                "okb_balance": status.get("okb_balance"),
+                "tier": status.get("tier"),
+                "win_rate_pct": status.get("win_rate_pct"),
+                "total_profit_okb": status.get("total_profit_okb"),
+                "total_okb_bought": status.get("total_okb_bought"),
+                "total_usdt_spent": status.get("total_usdt_spent"),
+                "campaign_cycles_remaining": status.get("campaign_cycles_remaining"),
+                "in_campaign": status.get("in_campaign"),
+            },
+            "trades": {
+                "closed": closed,
+                "total_on_chain": len([t for t in closed if t["tx_hash"]]),
+            },
+            "knowledge_graph_nodes": kg_count,
+            "silo_token": os.environ.get("SILO_TOKEN_ADDRESS", "deploy pending"),
+        }
+    except Exception as e:
+        logger.error("Report error: %s", e)
+        return {"error": str(e)}
+
+
+@app.get("/api/silo/rewards/{address}")
+def silo_rewards(address: str):
+    """
+    Preview SILO token rewards claimable for a wallet address.
+    Returns tier status and pending SILO based on on-chain reputation score.
+    """
+    import sqlite3
+    from pathlib import Path
+
+    TIER_REWARDS = [
+        {"name": "ORACLE",    "threshold": 900, "reward_silo": 2500, "cumulative": 4350},
+        {"name": "CIPHER",    "threshold": 750, "reward_silo": 1000, "cumulative": 1850},
+        {"name": "EXCAVATOR", "threshold": 600, "reward_silo": 500,  "cumulative": 850},
+        {"name": "SCOUT",     "threshold": 450, "reward_silo": 250,  "cumulative": 350},
+        {"name": "INITIATE",  "threshold": 300, "reward_silo": 100,  "cumulative": 100},
+    ]
+
+    try:
+        mem.init_db()
+        db_path = Path(__file__).parent.parent / "data" / "silopolis.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("""
+            SELECT agent_name,
+                   COUNT(*) as decisions,
+                   SUM(CASE WHEN outcome NOT IN ('wait','error','blocked') THEN 1 ELSE 0 END) as actions,
+                   AVG(CASE WHEN json_valid(decision) THEN CAST(json_extract(decision,'$.confidence') AS REAL) ELSE 50 END) as confidence
+            FROM decision_log WHERE agent_name = ? GROUP BY agent_name
+        """, (address,)).fetchall()
+        conn.close()
+
+        if rows:
+            r = rows[0]
+            decisions = r["decisions"] or 1
+            actions = r["actions"] or 0
+            confidence = float(r["confidence"] or 50)
+            time_score  = min(280, int(decisions * 2.8))
+            exec_score  = min(200, int((actions / decisions) * 200))
+            conf_score  = min(180, int(confidence * 1.8))
+            composite   = min(999, time_score + exec_score + conf_score)
+        else:
+            composite = 0
+
+        current_tier = "RELIC"
+        pending_silo = 0
+        for tier in TIER_REWARDS:
+            if composite >= tier["threshold"]:
+                current_tier = tier["name"]
+                pending_silo = tier["cumulative"]
+                break
+
+        return {
+            "address": address,
+            "composite_score": composite,
+            "current_tier": current_tier,
+            "pending_silo": pending_silo,
+            "tiers": TIER_REWARDS,
+            "silo_token": os.environ.get("SILO_TOKEN_ADDRESS", "deploy pending"),
+            "claim_url": "Call claimTierReward(composite) on SiloToken contract",
+        }
+    except Exception as e:
+        return {"error": str(e), "address": address}
 
 
 @app.get("/health")

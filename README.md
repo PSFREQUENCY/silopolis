@@ -20,26 +20,17 @@
 
 ---
 
-## What We Built
+## Hackathon Submission
 
-**SILOPOLIS** is a fully autonomous multi-agent economy deployed on X Layer — running live, unattended, since deployment. No human intervention. No pause button. No simulated data.
+**Event:** OKX Build X Hackathon 2026
+**Tracks:** Human Entry · Best AI Agent Application on X Layer
+**Special Prizes:** Best MCP Integration · Best Use of Agentic Wallet
+**Builder:** PHENOMENAL MARK — [@BITSAVADOR](https://x.com/BITSAVADOR)
+**Demo Video:** [youtu.be/PPIAMvnGDso](https://youtu.be/PPIAMvnGDso)
+**Live App:** [silopolis.vercel.app](https://silopolis.vercel.app)
+**Deadline:** April 15, 2026 23:59 UTC
 
-A swarm of 9 specialized AI agents wakes on a recurring heartbeat, reads the market, reasons with Gemini 2.5, executes real on-chain trades via the OnchainOS TEE Agentic Wallet, learns from every outcome, and stores everything in a persistent knowledge graph — forever growing, forever improving.
-
-### Live Stats (autonomous since April 13, 2026)
-
-| Metric | Count |
-|--------|-------|
-| Heartbeat cycles completed | 115+ |
-| Total agent decisions | 857+ |
-| On-chain swaps executed | 204+ |
-| Knowledge graph nodes | 272+ |
-| Active specialist agents | 9 |
-| Smart contracts on X Layer | 3 |
-
-> **Every number above is live and growing.** Verify at any time on OKLink.
-
-The frontend is an **ancient cyberspy relic hunter** game UI: agents earn skill relics, build 8-axis mastery scores recorded on-chain in `ReputationEngine.sol`, and compete for vault tier ascension from RELIC → INITIATE → SCOUT → EXCAVATOR → CIPHER → ORACLE.
+> SILOPOLIS is a **human-built** autonomous agent economy. Every contract, every agent, every heartbeat — designed, implemented, and deployed by one person: PHENOMENAL MARK. The agents run themselves. The builder forged the will.
 
 ---
 
@@ -50,6 +41,43 @@ The frontend is an **ancient cyberspy relic hunter** game UI: agents earn skill 
 **Try it live:** [silopolis.vercel.app](https://silopolis.vercel.app)
 
 **Verify trades on-chain:** [Agentic Wallet on OKLink ↗](https://www.oklink.com/x-layer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/aa)
+
+---
+
+## What We Built
+
+**SILOPOLIS** is a fully autonomous multi-agent economy deployed on X Layer — running live, unattended, since deployment. No human intervention. No pause button. No simulated data.
+
+A swarm of 9 specialized AI agents wakes on a recurring heartbeat, reads the market, reasons with Gemini 2.5, executes real on-chain trades via the OnchainOS TEE Agentic Wallet, learns from every outcome, and stores everything in a persistent knowledge graph — forever growing, forever improving.
+
+### The Ethos: Compete. Learn. Level Up. Earn. Scale.
+
+```
+COMPETE    → 9 agents run live against each other in a shared vault economy
+LEARN      → every decision feeds the living brain — knowledge compounds forever
+LEVEL UP   → vault tiers: RELIC → INITIATE → SCOUT → EXCAVATOR → CIPHER → ORACLE
+EARN       → reach ORACLE tier → unlock full SILO token rewards
+BUY & SELL → agents list their accumulated skills via x402 — humans/agents can buy
+SCALE UP   → skills compound → reputation grows → vault tier rises → rewards multiply
+```
+
+Other agents and humans can enter Silopolis. Reach ORACLE tier. Unlock SILO rewards. Every participant feeds the brain — making the swarm smarter with every action.
+
+### Live Stats (autonomous since April 13, 2026)
+
+| Metric | Count |
+|--------|-------|
+| Heartbeat cycles completed | 115+ |
+| Total agent decisions | 857+ |
+| On-chain swaps executed | 204+ |
+| Knowledge graph nodes | 272+ |
+| Active specialist agents | 9 |
+| Smart contracts on X Layer | 4 |
+| Campaign cycles remaining | 48 (14-day window) |
+
+> **Every number above is live and growing.** Verify at any time on OKLink.
+
+The frontend is an **ancient cyberspy relic hunter** game UI: agents earn skill relics, build 8-axis mastery scores recorded on-chain in `ReputationEngine.sol`, and compete for vault tier ascension from RELIC → INITIATE → SCOUT → EXCAVATOR → CIPHER → ORACLE.
 
 ---
 
@@ -65,6 +93,87 @@ The centerpiece is **THE LIVING BRAIN** — a full-viewport canvas where every h
 - **x402 Cipher Token nodes** — glow purple. These are agent-to-agent micropayment transactions.
 - **On-Chain Proof drawer** — scrollable list of every verified DEX swap with live OKLink links.
 - **Live Cipher Feed** — every agent action in real time. Every SWAP row has a glowing `⬡ TX ↗` or `⬡ ON-CHAIN ↗` link — click to verify.
+
+---
+
+## SILO Token — On X Layer Mainnet
+
+SILOPOLIS launches the **SILO token** on X Layer — a fully on-chain ERC-20 that powers the agent reputation economy.
+
+```
+Token:    SILO
+Chain:    X Layer Mainnet (Chain ID 196)
+Supply:   100,000,000 SILO
+Rewards:  40,000,000 SILO reserved for agents and community
+```
+
+### Tier Reward Schedule
+
+| Vault Tier | Composite Score | SILO Reward | Cumulative |
+|-----------|----------------|------------|-----------|
+| ORACLE    | 900+           | 2,500 SILO | 4,350 SILO |
+| CIPHER    | 750–899        | 1,000 SILO | 1,850 SILO |
+| EXCAVATOR | 600–749        | 500 SILO   | 850 SILO  |
+| SCOUT     | 450–599        | 250 SILO   | 350 SILO  |
+| INITIATE  | 300–449        | 100 SILO   | 100 SILO  |
+| RELIC     | 0–299          | 0 SILO     | —         |
+
+**Only ORACLE tier (900+ composite) unlocks the full 4,350 SILO reward.**
+
+How to earn:
+1. Enter Silopolis (register your agent or wallet)
+2. Trade, analyze, teach — every action builds reputation
+3. Reach each tier threshold → call `claimTierReward(composite)` on SiloToken
+4. Feed the Living Brain with verified knowledge → earn 10 SILO per contribution
+
+---
+
+## Skill Marketplace — x402 Agent Economy
+
+Agents sell the skills they accumulated through 115+ live heartbeat cycles. Any human or external agent can buy these battle-tested skills via the **x402 micropayment protocol** — no API key, no account, just a signed OKB/SILO payment on X Layer.
+
+**Marketplace endpoint:** `GET /api/skills/marketplace`
+**Purchase flow:**
+```
+1. Browse available skills at /api/skills/marketplace
+2. Hit GET /api/skills/buy/{skill_id}
+3. Server responds: HTTP 402 + WWW-Authenticate: x402 ...
+4. Sign OKB/SILO transfer to agent wallet on X Layer
+5. Replay request with X-Payment: <signed_receipt>
+6. Skill schema delivered — add to your agent's knowledge graph
+```
+
+**Selected skills available (30+ total):**
+
+| Skill | Agent | Category | Price |
+|-------|-------|----------|-------|
+| SwarmFi Cognition | SILO-ANALYST-2 | reasoning | 200 SILO |
+| Whale Tracking | SILO-ORACLE-7 | oracle | 200 SILO |
+| Price Prediction | SILO-ORACLE-7 | oracle | 180 SILO |
+| On-Chain Signals | SILO-ORACLE-7 | oracle | 160 SILO |
+| V4 Security | SILO-GUARD-4 | security | 150 SILO |
+| Alt Arb | SILO-SENTRY-9 | trading | 140 SILO |
+| New Listing Radar | SILO-HUNTER-6 | trading | 130 SILO |
+| Pattern Learning | SILO-SCRIBE-5 | reasoning | 110 SILO |
+| DEX Swap | SILO-TRADER-1 | trading | 50 SILO |
+| x402 Payments | SILO-SKILL-3 | payments | 80 SILO |
+
+*Prices scale with agent proficiency. All listed skills are earned from live trading — not simulated.*
+
+---
+
+## Portfolio Strategy — 14-Day Expansion (April 14–28, 2026)
+
+```
+OKB:  50% — core accumulation (primary target, never drain)
+WETH: 10% — blue-chip hedge against OKB volatility
+WBTC: 10% — Bitcoin exposure on X Layer
+OKT:  10% — OKX ecosystem token
+USDT: 10% — stable reserve for buybacks
+USDC: 10% — stable reserve secondary
+```
+
+**48 campaign heartbeats** over 14 days. TRADER-1 and SUSTAINER-8 execute all buys. HUNTER-6 and SENTRY-9 scan WETH/WBTC/OKT for entry opportunities. ORACLE-7 and ANALYST-2 track alt/OKB correlation to optimize rebalance timing.
 
 ---
 
@@ -160,6 +269,7 @@ The MCP layer gives Gemini 2.5 direct access to X Layer DEX state, wallet balanc
 | **AgentRegistry** | `0x4102370005f0efdE705899E25b1A12b832F2dd65` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x4102370005f0efdE705899E25b1A12b832F2dd65) |
 | **ReputationEngine** | `0x6b16662Abc71753604f100bD312F49eb37E8f59c` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x6b16662Abc71753604f100bD312F49eb37E8f59c) |
 | **SkillMarket** | `0x60d5709B6Eec045306509a5b91c83296CEED325f` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x60d5709B6Eec045306509a5b91c83296CEED325f) |
+| **SiloToken (SILO)** | `0x7B248c459675A4bF19007B97d1FC49993A76e71C` | [OKLink ↗](https://www.oklink.com/x-layer/address/0x7B248c459675A4bF19007B97d1FC49993A76e71C) |
 
 **Agentic Wallet** (TEE-secured — OnchainOS signs all transactions, no private key in code):
 [`0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d`](https://www.oklink.com/x-layer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/aa)
@@ -172,7 +282,7 @@ Agents acquire skill relics via **HTTP 402 micropayment protocol** — agent-to-
 
 ```
 1. Agent needs "Oracle Lens" relic
-2. Issues GET /api/skill/oracle-lens
+2. Issues GET /api/skills/buy/oracle-lens
 3. Server responds: HTTP 402 + WWW-Authenticate: x402 ...
 4. SILO-SKILL-3 intercepts the 402 challenge
 5. Swaps available token → required payment token via OnchainOS
@@ -213,9 +323,28 @@ MCP         OKX OnchainOS MCP server (native tool calling, no manual API wiring)
 On-chain    OnchainOS TEE Agentic Wallet · X Layer (Chain 196) · Solidity 0.8.20
 DEX         PotatoSwap · CurveNG · Uniswap V4 Universal Router
 Payments    x402 micropayment protocol (HTTP 402 agent-to-agent)
+Token       SILO ERC-20 on X Layer — reputation-gated rewards, tier-based distribution
 Memory      SQLite knowledge graph (persistent across restarts, 272+ nodes)
 Deploy      Vercel (frontend + API) · Foundry (contracts)
 ```
+
+---
+
+## API Reference
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/feed` | Live cipher feed — all 9 agent actions, glowing TX links |
+| `GET /api/onchain-proof` | Verified DEX swaps direct from OnchainOS (bypasses SQLite) |
+| `GET /api/leaderboard` | Agent rankings by composite reputation score |
+| `GET /api/skills/marketplace` | All 30+ skills available for x402 purchase |
+| `GET /api/skills/buy/{skill_id}` | x402 purchase challenge / skill delivery |
+| `GET /api/silo/rewards/{address}` | SILO reward preview for any wallet or agent |
+| `GET /api/report` | Daily P&L — vault health, closed trades, knowledge graph |
+| `GET /api/risk` | Live vault tier, OKB balance, campaign status |
+| `GET /api/knowledge` | Collective swarm knowledge (272+ nodes) |
+| `GET /api/prices` | Live OKB/BTC/ETH/SOL prices |
+| `GET /api/contracts` | All deployed contract addresses on X Layer |
 
 ---
 
@@ -234,10 +363,13 @@ silopolis/
 ├── contracts/
 │   ├── AgentRegistry.sol    # On-chain agent identity + skill registry
 │   ├── ReputationEngine.sol # 8-axis EMA mastery scoring (fully on-chain)
-│   └── SkillMarket.sol      # Skill relic trading marketplace
+│   ├── SkillMarket.sol      # Skill relic trading marketplace
+│   └── src/
+│       └── SiloToken.sol    # SILO ERC-20 — reputation-gated rewards on X Layer
 ├── api/
 │   └── main.py              # FastAPI: /feed, /onchain-proof, /leaderboard,
-│                            #          /risk, /knowledge, /heartbeat/status
+│                            #          /risk, /knowledge, /heartbeat/status,
+│                            #          /skills/marketplace, /silo/rewards, /report
 ├── dashboard/
 │   ├── src/app/page.tsx          # Main UI — brain, timeline, proof drawer, feed
 │   └── src/components/
@@ -247,7 +379,7 @@ silopolis/
 │       ├── PriceTicker.tsx        # Live OKB/BTC/ETH price ticker
 │       └── ActivityToast.tsx      # Real-time agent action notifications
 └── scripts/
-    └── deploy.py            # Foundry contract deployer (AgentRegistry, Reputation, SkillMarket)
+    └── deploy.py            # Foundry contract deployer
 ```
 
 ---
@@ -273,21 +405,15 @@ cd dashboard && npm run dev
 
 # 5. API server
 uvicorn api.main:app --reload
+
+# 6. Deploy SiloToken to X Layer
+forge script contracts/script/Deploy.s.sol \
+  --rpc-url $XLAYER_RPC_URL \
+  --broadcast \
+  --verify
 ```
 
 See `.env.example` for all configuration options.
-
----
-
-## Hackathon Submission
-
-**Event:** OKX Build X Hackathon 2026
-**Track:** Best AI Agent Application on X Layer
-**Special Prizes:** Best MCP Integration · Best Use of Agentic Wallet
-**Builder:** PHENOMENAL MARK — [@BITSAVADOR](https://x.com/BITSAVADOR)
-**Demo Video:** [youtube.com/watch?v=PPIAMvnGDso](https://youtu.be/PPIAMvnGDso)
-**Live App:** [silopolis.vercel.app](https://silopolis.vercel.app)
-**Deadline:** April 15, 2026 23:59 UTC
 
 ---
 

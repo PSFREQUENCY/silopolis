@@ -125,9 +125,23 @@ HEARTBEAT_INTERVAL_SEC = int(os.environ.get("SILOPOLIS_HEARTBEAT_INTERVAL", str(
 
 # Token addresses on X Layer (Chain 196)
 _XLAYER_TOKENS = {
-    "OKB":  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",  # native
-    "USDT": "0x1e4a5963abfd975d8c9021ce480b42188849d41d",
-    "USDC": "0x74b7f16337b8972027f6196a17a631ac6de26d22",
+    "OKB":  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",  # native — target 50% of portfolio
+    "USDT": "0x1e4a5963abfd975d8c9021ce480b42188849d41d",   # stable base
+    "USDC": "0x74b7f16337b8972027f6196a17a631ac6de22a2",   # stable secondary
+    "WETH": "0x5a77f1443d16ee5761d310e38b62f77f726bc71c",   # 10% target
+    "WBTC": "0xea034fb02eb1808c2cc3adbc15f447b93cbe08e1",   # 10% target
+    "OKT":  "0xdf54b6c6195ea4d948d03bfd818d365cf175cfc2",   # 10% target — OKX native
+}
+
+# Portfolio allocation targets (14-day campaign: April 14 → April 28, 2026)
+# Strategy: 50% OKB (primary accumulation) + 10% × 5 X Layer alts
+_PORTFOLIO_TARGETS = {
+    "OKB":  0.50,   # Core — accumulate aggressively
+    "WETH": 0.10,   # Blue-chip hedge
+    "WBTC": 0.10,   # BTC exposure on X Layer
+    "OKT":  0.10,   # OKX ecosystem token
+    "USDT": 0.10,   # Stable reserve for buybacks
+    "USDC": 0.10,   # Stable reserve secondary
 }
 
 # ─── Observation Phase ────────────────────────────────────────────────────────
@@ -354,12 +368,16 @@ def reason(agent_def: dict, observation: dict) -> dict:
         cycles_left = _risk.state.campaign_cycles_remaining
         okb_bought  = _risk.state.total_okb_bought
         campaign_ctx = (
-            f"\n🔥 AGGRESSIVE ACCUMULATION CAMPAIGN ACTIVE — {cycles_left} cycles remaining. "
+            f"\n🔥 AGGRESSIVE ACCUMULATION CAMPAIGN ACTIVE — {cycles_left} cycles remaining (14-day window). "
             f"Accumulated {okb_bought:.6f} OKB so far. "
             "MAXIMIZE OKB acquisition every cycle. TRADER-1 and SUSTAINER-8 execute buys. "
             "All other agents: scan for optimal entry points, forecast price movements, "
             "identify new opportunities to maximize OKB compounding. "
-            "Target: double the vault OKB holdings before campaign ends."
+            "Target: double the vault OKB holdings before campaign ends.\n"
+            "PORTFOLIO EXPANSION ACTIVE — Target allocation:\n"
+            "  50% OKB (primary), 10% WETH, 10% WBTC, 10% OKT, 10% USDT (reserve), 10% USDC (reserve)\n"
+            "HUNTER-6 and SENTRY-9: scan WETH, WBTC, OKT pairs for entry opportunities on X Layer DEX.\n"
+            "ANALYST-2 and ORACLE-7: track alt token price vs OKB correlation to optimize rebalance timing."
         )
 
     vault_ctx = (
