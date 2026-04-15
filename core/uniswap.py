@@ -41,14 +41,26 @@ UNIVERSAL_ROUTER = {
 # Permit2 (same address on all EVM chains)
 PERMIT2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3"
 
-# Well-known token addresses on X Layer
+# Well-known token addresses on X Layer — tested against OnchainOS DEX
+# Use contract addresses directly for tokens where symbol lookup fails
 XLAYER_TOKENS = {
-    "OKB":  "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # native OKB
-    "USDT": "0x1E4a5963aBFD975d8c9021ce480b42188849D41d",
-    "USDC": "0x74b7F16337b8972027F6196A17a631aC6dE26d22",
-    "WETH": "0x5A77f1443D16ee5761d310e38b62f77f726bC71c",
-    "WOKB": "0xe538905cf8410324e03A5A23C1c177a474D59b2b",
+    "OKB":    "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",   # native OKB — use symbol OK too
+    "USDT0":  "0x779ded0c9e1022225f8e0630b35a9b54be713736",   # Bridged Tether (USD₮0) — wallet holds this
+    "USDC":   "0x74b7f16337b8972027f6196a17a631ac6de26d22",   # USD Coin — use address, symbol fails
+    "WOKB":   "0xe538905cf8410324e03a5a23c1c177a474d59b2b",   # Wrapped OKB
+    "XLAYER_USDT": "0x1e4a5963abfd975d8c9021ce480b42188849d41d",  # Native USDT on X Layer
 }
+
+# Symbol→address resolution for X Layer CLI swaps
+# Some symbols the CLI doesn't accept — must use contract address
+_XLAYER_SYMBOL_TO_ADDR: dict[str, str] = {
+    "USDC":        "0x74b7f16337b8972027f6196a17a631ac6de26d22",
+    "XLAYER_USDT": "0x1e4a5963abfd975d8c9021ce480b42188849d41d",
+}
+
+def _resolve_xlayer_token(token: str) -> str:
+    """Convert known X Layer token symbols to addresses where needed by CLI."""
+    return _XLAYER_SYMBOL_TO_ADDR.get(token.upper(), token)
 
 XLAYER_CHAIN_ID = 196
 
@@ -108,7 +120,9 @@ def _xlayer_swap_quote(
 ) -> SwapQuote | None:
     """Use OnchainOS CLI to get X Layer swap quote via PotatoSwap/CurveNG."""
     slippage_pct = str(slippage_bps / 100)
-    raw = onchainos.swap_quote(from_token, to_token, amount, chain="xlayer")
+    from_resolved = _resolve_xlayer_token(from_token)
+    to_resolved   = _resolve_xlayer_token(to_token)
+    raw = onchainos.swap_quote(from_resolved, to_resolved, amount, chain="xlayer")
 
     # CLI may return list or dict — normalise to dict
     if isinstance(raw, list):
@@ -224,7 +238,9 @@ def execute_swap(
 
     if chain_id == XLAYER_CHAIN_ID:
         slippage_pct = str(slippage_bps / 100)
-        raw = onchainos.swap_execute(from_token, to_token, amount,
+        from_resolved = _resolve_xlayer_token(from_token)
+        to_resolved   = _resolve_xlayer_token(to_token)
+        raw = onchainos.swap_execute(from_resolved, to_resolved, amount,
                                      chain="xlayer", slippage=slippage_pct)
         logger.info("onchainos swap_execute raw response: %s", json.dumps(raw)[:500])
 

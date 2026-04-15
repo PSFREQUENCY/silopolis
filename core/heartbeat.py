@@ -372,10 +372,9 @@ def reason(agent_def: dict, observation: dict) -> dict:
             "All other agents: scan for optimal entry points, forecast price movements, "
             "identify new opportunities to maximize OKB compounding. "
             "Target: double the vault OKB holdings before campaign ends.\n"
-            "PORTFOLIO EXPANSION ACTIVE — Target allocation:\n"
-            "  55% OKB (primary), 30% USDT0 (bridged USDT reserve), 10% USDC (reserve), 5% SILO\n"
-            "ALL TRADERS: swap USDT0→OKB (from_token='USDT0') every single cycle — maximize OKB position.\n"
-            "ANALYST-2 and ORACLE-7: track OKB/USDT0 spread and signal optimal swap timing."
+            "PORTFOLIO EXPANSION ACTIVE — Target: 55% OKB, 35% USDT0, 8% USDC, 2% SILO\n"
+            "ALL TRADERS: execute USDT0→OKB every cycle (from_token='USDT0', to_token='OKB').\n"
+            "ANALYST-2: diversify with small USDT0→USDC swaps. ORACLE-7: LP on OKB/USDT0."
         )
 
     vault_ctx = (
@@ -412,19 +411,19 @@ ACCUMULATE OKB and build a diversified X Layer portfolio.
 OKB floor: 0.00222 OKB — NEVER let balance drop below this.
 Buffer zone: balance < 0.00666 OKB → ALWAYS buy OKB with USDT, never sell.
 
-TARGET PORTFOLIO (14-day campaign — X Layer confirmed liquid tokens):
+TARGET PORTFOLIO (14-day campaign — X Layer confirmed liquid tokens on PotatoSwap/CurveNG):
   55% OKB   — core, accumulate aggressively every cycle
-  30% USDT0 — Bridged USDT (USD₮0) reserve — hold for buybacks and arb
-  10% USDC  — stable secondary reserve
-   5% SILO  — earn via reputation tiers, LP on SILO/OKB pair
+  35% USDT0 — Bridged USDT (USD₮0) reserve — hold for buybacks
+   8% USDC  — stable secondary (swap symbol="USDC" via address 0x74b7f163...)
+   2% SILO  — earn via reputation tiers — no DEX liquidity yet
 
-WALLET HAS: USDT0 (Bridged USDT / USD₮0) and OKB. Use USDT0 as from_token for ALL stablecoin swaps.
-TRADER-1 and SUSTAINER-8: execute USDT0→OKB buybacks every cycle (from_token="USDT0", to_token="OKB").
-HUNTER-6 and SENTRY-9: execute USDT0→OKB swaps with small amounts — execute every cycle.
-ANALYST-2 and ORACLE-7: provide liquidity (LP) on OKB/USDT0 and SILO/OKB pairs.
+WALLET HAS: USDT0 (Bridged Tether) and OKB and USDC.
+TRADER-1 and SUSTAINER-8: execute USDT0→OKB every cycle (from_token="USDT0", to_token="OKB", amount="0.05").
+HUNTER-6 and SENTRY-9: execute USDT0→OKB swaps — from_token="USDT0", to_token="OKB", amount="0.02".
+ANALYST-2: swap small amounts USDT0→USDC for stable diversification (from_token="USDT0", to_token="USDC").
+ORACLE-7: provide liquidity (LP) on OKB/USDT0 pair.
 SKILL-3: accumulate SILO by calling claimTierReward() when composite reaches tier thresholds.
-SILO token (SILOPOLIS native): 0x7B248c459675A4bF19007B97d1FC49993A76e71C
-All others: forecast, analyze, scan for arbitrage on OKB/USDT0 pair.
+All others: forecast, analyze, scan for arbitrage on OKB/USDT0 and USDT0/USDC pairs.
 
 === ABSOLUTE RULE — YOUR REASONING MUST NEVER REFERENCE SYSTEM INTERNALS ===
 FORBIDDEN PHRASES — if these appear in your output, your response FAILS:

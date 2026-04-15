@@ -91,6 +91,14 @@ const SKILL_RELICS = [
   { id: "threat-gate",   name: "Arbiter Seal",      glyph: "◇", color: "#FB923C", desc: "Local safety arbiter — blocks score ≥76",     rarity: "UNCOMMON"  },
 ];
 
+// X Layer confirmed liquid tokens — tested on PotatoSwap/CurveNG
+const PORTFOLIO_BASKET = [
+  { symbol: "OKB",   pct: 55, color: "#DAA520", desc: "Core — accumulate every cycle" },
+  { symbol: "USDT0", pct: 35, color: "#34D399", desc: "Bridged USDT — buyback reserve" },
+  { symbol: "USDC",  pct:  8, color: "#818CF8", desc: "Stable secondary" },
+  { symbol: "SILO",  pct:  2, color: "#C084FC", desc: "Protocol token — earn via tiers" },
+];
+
 const RARITY_COLORS: Record<string, string> = {
   LEGENDARY: "text-yellow-300",
   EPIC:      "text-purple-300",
@@ -365,14 +373,7 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
   const implScore    = risk.total_trades > 0 ? Math.min(100, ((risk.winning_trades ?? 0) / risk.total_trades) * 100 + 10) : 10;
   const improvScore  = Math.min(100, risk.win_rate_pct + (cycleCount * 2));
 
-  // X Layer confirmed liquid tokens — 14-day campaign targets
-  const basket = [
-    { symbol: "OKB",  pct: 50, color: "#DAA520", desc: "Core — accumulate every cycle" },
-    { symbol: "USDT", pct: 20, color: "#34D399", desc: "Stable base — buyback reserve" },
-    { symbol: "USDC", pct: 15, color: "#818CF8", desc: "Stable secondary — arb spread" },
-    { symbol: "USDG", pct: 10, color: "#22d3ee", desc: "Gravity USD — X Layer native" },
-    { symbol: "SILO", pct:  5, color: "#C084FC", desc: "Protocol token — LP on SILO/OKB" },
-  ];
+  const basket = PORTFOLIO_BASKET;
 
   return (
     <div className="p-5 relative overflow-hidden" style={{ background: "#080604", border: "1px solid #2A1E0A" }}>
@@ -1143,6 +1144,22 @@ export default function SilopolisPage() {
           from { box-shadow: 0 0 8px rgba(255,215,0,0.4), 0 0 18px rgba(255,215,0,0.15), inset 0 0 6px rgba(255,215,0,0.05); }
           to   { box-shadow: 0 0 14px rgba(255,215,0,0.8), 0 0 32px rgba(255,215,0,0.35), inset 0 0 12px rgba(255,215,0,0.10); }
         }
+        @keyframes cyclePulse {
+          0%,100% { opacity: 0.55; transform: scale(1); }
+          50%     { opacity: 1;    transform: scale(1.08); }
+        }
+        @keyframes cycleOrbit {
+          from { transform: rotate(0deg) translateX(54px) rotate(0deg); }
+          to   { transform: rotate(360deg) translateX(54px) rotate(-360deg); }
+        }
+        @keyframes cycleOrbit2 {
+          from { transform: rotate(120deg) translateX(38px) rotate(-120deg); }
+          to   { transform: rotate(480deg) translateX(38px) rotate(-480deg); }
+        }
+        @keyframes cycleOrbit3 {
+          from { transform: rotate(240deg) translateX(28px) rotate(-240deg); }
+          to   { transform: rotate(600deg) translateX(28px) rotate(-600deg); }
+        }
         .tx-link-btn { transition: transform 0.1s; cursor: pointer; }
         .tx-link-btn:hover { transform: scale(1.06); }
         .classified-in { animation: flicker 0.4s ease-out; }
@@ -1326,6 +1343,56 @@ export default function SilopolisPage() {
           />
         </div>
 
+        {/* ── CYCLE PENDING OVERLAY — glowing cluster while waiting for on-chain confirm ── */}
+        {cycleRunning && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+            {/* Dark vignette */}
+            <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at center, transparent 25%, rgba(5,4,2,0.75) 80%)" }} />
+
+            {/* Orbiting node cluster */}
+            <div className="relative flex items-center justify-center" style={{ width: 140, height: 140 }}>
+              {/* Core node */}
+              <div style={{
+                width: 28, height: 28,
+                borderRadius: "50%",
+                background: "radial-gradient(circle, #FFD700 0%, #B8860B 60%, transparent 100%)",
+                boxShadow: "0 0 30px #FFD700, 0 0 60px #B8860B60, 0 0 90px #B8860B30",
+                animation: "cyclePulse 1.2s ease-in-out infinite",
+                position: "relative", zIndex: 2,
+              }} />
+
+              {/* Orbit 1 — large */}
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ animation: "cycleOrbit 2.4s linear infinite" }}>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#00f0ff", boxShadow: "0 0 12px #00f0ff, 0 0 24px #00f0ff60" }} />
+                </div>
+              </div>
+              {/* Orbit 2 — medium */}
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ animation: "cycleOrbit2 1.8s linear infinite" }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 10px #22c55e, 0 0 20px #22c55e60" }} />
+                </div>
+              </div>
+              {/* Orbit 3 — small fast */}
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ animation: "cycleOrbit3 1.1s linear infinite" }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#C084FC", boxShadow: "0 0 8px #C084FC, 0 0 16px #C084FC60" }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Status text */}
+            <div className="absolute font-mono text-xs tracking-[0.25em] animate-pulse"
+              style={{ color: "#DAA520", bottom: "calc(50% - 90px)", textAlign: "center" }}>
+              ◈ CYCLE EXECUTING · AWAITING ON-CHAIN CONFIRM
+            </div>
+            <div className="absolute font-mono text-xs tracking-[0.15em]"
+              style={{ color: "#4A3A22", bottom: "calc(50% - 108px)", textAlign: "center" }}>
+              ~44s · PotatoSwap · X LAYER
+            </div>
+          </div>
+        )}
+
         {/* Top overlay — section label + headline */}
         <div className="absolute top-0 inset-x-0 z-10 pointer-events-none flex flex-col items-center pt-12 px-6 text-center">
           <div className="text-xs tracking-[0.3em] mb-3" style={{ color: "#4A3A22" }}>
@@ -1503,8 +1570,8 @@ export default function SilopolisPage() {
           </div>
 
           {/* Portfolio allocation bars — one per token */}
-          <div className="grid gap-4 md:grid-cols-5">
-            {basket.map((t) => {
+          <div className="grid gap-4 md:grid-cols-4">
+            {PORTFOLIO_BASKET.map((t) => {
               const isOKB = t.symbol === "OKB";
               const balance = isOKB ? okbBalance : 0;
               const usdVal  = isOKB && okbPrice > 0 ? okbBalance * okbPrice : 0;
