@@ -164,10 +164,26 @@ def _gemini_generate(
         payload["systemInstruction"] = {"parts": [{"text": system}]}
 
     url = f"{GEMINI_BASE}/{model}:generateContent?key={GEMINI_KEY}"
-    resp = httpx.post(url, json=payload, timeout=45.0)
-    resp.raise_for_status()
-    data = resp.json()
-    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    # Retry up to 3x on 429 (rate limit) with progressive backoff
+    for attempt in range(3):
+        try:
+            resp = httpx.post(url, json=payload, timeout=60.0)
+            if resp.status_code == 429:
+                wait = 20 + attempt * 15  # 20s, 35s, 50s
+                logger.info("[Gemini] 429 rate limit on %s — waiting %ds (attempt %d/3)", model, wait, attempt + 1)
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except httpx.ReadTimeout:
+            if attempt < 2:
+                logger.warning("[Gemini] Read timeout on %s (attempt %d/3) — retrying", model, attempt + 1)
+                time.sleep(5)
+                continue
+            raise
+    raise RuntimeError(f"Gemini {model} unavailable after 3 attempts")
 
 
 # ─── NVIDIA NIM Client (MiniMax M2.7) ─────────────────────────────────────────
@@ -197,7 +213,7 @@ def _nim_generate(
     }
     # Retry up to 3 times on 429 with backoff
     for attempt in range(3):
-        resp = httpx.post(f"{NIM_BASE}/chat/completions", json=payload, headers=headers, timeout=60.0)
+        resp = httpx.post(f"{NIM_BASE}/chat/completions", json=payload, headers=headers, timeout=90.0)
         if resp.status_code == 404:
             raise EnvironmentError(f"NIM model {NIM_MODEL!r} not found on cloud API (404).")
         if resp.status_code == 429:

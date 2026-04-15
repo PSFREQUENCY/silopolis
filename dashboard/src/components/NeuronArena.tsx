@@ -251,7 +251,7 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
 
     const poll = async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/feed?limit=9`, { headers: FETCH_HEADERS });
+        const r = await fetch(`${API_BASE}/api/feed?limit=60`, { headers: FETCH_HEADERS });
         if (!r.ok) return;
         const data = await r.json();
         const items: FeedItem[] = data.feed ?? [];
@@ -305,7 +305,7 @@ export default function NeuronArena({ txHistory, timelineIdx }: NeuronArenaProps
     };
 
     poll();
-    const iv = setInterval(poll, 25_000);
+    const iv = setInterval(poll, 10_000);  // 10s — brain pulses every new action
     return () => clearInterval(iv);
   }, []); // eslint-disable-line
 

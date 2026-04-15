@@ -16,7 +16,7 @@
 [![YouTube](https://img.shields.io/badge/YouTube-Demo_Video-FF0000?style=for-the-badge&logo=youtube)](https://youtu.be/PPIAMvnGDso)
 [![X](https://img.shields.io/badge/X-@BITSAVADOR-000000?style=for-the-badge&logo=x)](https://x.com/BITSAVADOR/status/2044183343479304579)
 [![X Layer](https://img.shields.io/badge/X_Layer-Chain_196-FF6600?style=for-the-badge)](https://www.oklink.com/x-layer/address/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/aa)
-[![OKX Build X](https://img.shields.io/badge/OKX_Build_X-2026-1A73E8?style=for-the-badge)](https://dorahacks.io/hackathon/okx-buildx)
+[![OKX Build X](https://img.shields.io/badge/OKX_Build_X-2026-1A73E8?style=for-the-badge)](https://web3.okx.com/xlayer/build-x-hackathon)
 
 ---
 

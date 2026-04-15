@@ -410,10 +410,21 @@ Market signals: {len(observation['market'].get('signals', []))} active
 {decision_ctx}
 
 === PRIMARY MISSION ===
-ACCUMULATE OKB. This vault's sole purpose is to GROW OKB holdings over time.
+ACCUMULATE OKB and build a diversified X Layer portfolio.
 OKB floor: 0.00222 OKB — NEVER let balance drop below this.
-Buffer zone: balance < 0.00666 OKB (3x floor) → ALWAYS buy OKB with USDT, never sell.
-Only sell OKB if balance > 0.01 OKB AND you see a clear profitable spread.
+Buffer zone: balance < 0.00666 OKB → ALWAYS buy OKB with USDT, never sell.
+
+TARGET PORTFOLIO (14-day campaign — hold ALL X Layer tokens):
+  50% OKB — core, accumulate aggressively
+  10% WETH — buy small amounts each cycle (USDT→WETH on X Layer DEX)
+  10% WBTC — buy small amounts each cycle (USDT→WBTC on X Layer DEX)
+  10% OKT  — buy small amounts each cycle (USDT→OKT on X Layer DEX)
+  10% USDT — stable reserve (keep for buybacks)
+  10% USDC — stable secondary reserve
+
+HUNTER-6 and SENTRY-9: execute USDT→WETH, USDT→WBTC, USDT→OKT swaps with small amounts.
+TRADER-1 and SUSTAINER-8: execute USDT→OKB buybacks.
+All others: forecast, analyze, scan for arbitrage across ALL X Layer pairs.
 
 === ABSOLUTE RULE — YOUR REASONING MUST NEVER REFERENCE SYSTEM INTERNALS ===
 FORBIDDEN PHRASES — if these appear in your output, your response FAILS:

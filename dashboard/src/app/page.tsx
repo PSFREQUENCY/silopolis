@@ -365,11 +365,14 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
   const implScore    = risk.total_trades > 0 ? Math.min(100, ((risk.winning_trades ?? 0) / risk.total_trades) * 100 + 10) : 10;
   const improvScore  = Math.min(100, risk.win_rate_pct + (cycleCount * 2));
 
-  // Multi-coin basket allocation targets (MICRO tier: max OKB accumulation)
+  // 14-day portfolio expansion: 50% OKB + 10% × 5 X Layer tokens
   const basket = [
-    { symbol: "OKB",  pct: 70, color: "#DAA520", desc: "Core accumulation target" },
-    { symbol: "USDT", pct: 22, color: "#34D399", desc: "Stable buyback reserve" },
-    { symbol: "USDC", pct: 8,  color: "#60A5FA", desc: "Arb buffer" },
+    { symbol: "OKB",  pct: 50, color: "#DAA520", desc: "Core — accumulate always" },
+    { symbol: "WETH", pct: 10, color: "#60A5FA", desc: "Blue-chip hedge" },
+    { symbol: "WBTC", pct: 10, color: "#F97316", desc: "BTC exposure" },
+    { symbol: "OKT",  pct: 10, color: "#22d3ee", desc: "OKX ecosystem" },
+    { symbol: "USDT", pct: 10, color: "#34D399", desc: "Buyback reserve" },
+    { symbol: "USDC", pct: 10, color: "#818CF8", desc: "Stable secondary" },
   ];
 
   return (
@@ -510,7 +513,7 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
 // ─── Wallet + Explorer Panel ─────────────────────────────────────────────────
 
 const WALLET = "0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d";
-const EXPLORER = `https://www.oklink.com/xlayer/address/${WALLET}`;
+const EXPLORER = `https://www.oklink.com/x-layer/address/${WALLET}/aa`;
 
 function WalletPanel({ apiBase }: { apiBase: string }) {
   const [risk, setRisk] = useState<RiskStatus | null>(null);
@@ -1039,26 +1042,57 @@ export default function SilopolisPage() {
     }
   }, []); // eslint-disable-line
 
-  // Load feed history for mesh timeline
+  // Load feed history for mesh timeline — merges DB decisions + on-chain proof TXs
   const loadFeedHistory = useCallback(async () => {
     try {
-      const r = await fetch(`${API_BASE}/api/feed?limit=200`, { headers: FETCH_HEADERS });
-      if (!r.ok) return;
-      const data = await r.json();
-      const items: { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string }[] = data.feed ?? [];
-      // Include ALL feed rows in mesh — verified tx get OKLink on click, others still show in mesh
-      const txItems: TxHistoryItem[] = [...items].reverse().map(f => ({
-          ts: f.ts,
-          agent: f.agent,
-          action: f.action,
-          tx_hash: (f.tx_hash && f.tx_hash !== "DRY_RUN") ? f.tx_hash : undefined,
-          color: AGENT_COLORS[f.agent] ?? "#DAA520",
-          is_x402: f.agent === "SILO-SKILL-3" || (f.reasoning ?? "").toLowerCase().includes("x402"),
-        }));
-      setFeedHistory(txItems);
-      setTimelineIdx(txItems.length - 1); // start at most recent
+      const opts = { headers: FETCH_HEADERS };
+      // Fetch both sources in parallel
+      const [feedRes, proofRes] = await Promise.allSettled([
+        fetch(`${API_BASE}/api/feed?limit=500`, opts).then(r => r.ok ? r.json() : null),
+        fetch(`${API_BASE}/api/onchain-proof?limit=300`, opts).then(r => r.ok ? r.json() : null),
+      ]);
+
+      const feedData   = feedRes.status === "fulfilled" ? feedRes.value : null;
+      const proofData  = proofRes.status === "fulfilled" ? proofRes.value : null;
+      const items: { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string }[] = feedData?.feed ?? [];
+
+      // Build a set of known tx_hashes from feed to avoid duplication
+      const knownHashes = new Set(items.filter(f => f.tx_hash && f.tx_hash !== "DRY_RUN").map(f => f.tx_hash));
+
+      // Merge on-chain proof trades not already in the feed
+      const proofItems: TxHistoryItem[] = [];
+      if (proofData?.trades) {
+        for (const t of proofData.trades) {
+          if (t.tx_hash && !knownHashes.has(t.tx_hash)) {
+            // Assign to trader since we don't know which agent did it
+            proofItems.push({
+              ts: t.ts,
+              agent: "SILO-TRADER-1",
+              action: "SWAP",
+              tx_hash: t.tx_hash,
+              color: "#DAA520",
+              is_x402: false,
+            });
+          }
+        }
+      }
+
+      // Main feed items (reversed so oldest-first for timeline ordering)
+      const feedItems: TxHistoryItem[] = [...items].reverse().map(f => ({
+        ts: f.ts,
+        agent: f.agent,
+        action: f.action,
+        tx_hash: (f.tx_hash && f.tx_hash !== "DRY_RUN") ? f.tx_hash : undefined,
+        color: AGENT_COLORS[f.agent] ?? "#DAA520",
+        is_x402: f.agent === "SILO-SKILL-3" || (f.reasoning ?? "").toLowerCase().includes("x402"),
+      }));
+
+      // Merge: on-chain proof first (older), then DB feed items (newer)
+      const merged = [...proofItems, ...feedItems];
+      setFeedHistory(merged);
+      setTimelineIdx(merged.length - 1); // always show latest = auto-advance
     } catch {
-      // keep empty
+      // keep existing
     }
   }, []); // eslint-disable-line
 
@@ -1067,8 +1101,8 @@ export default function SilopolisPage() {
     loadFeedHistory();
     // Classified flicker on mount
     setTimeout(() => setClassified(true), 300);
-    const iv = setInterval(refresh, 30_000);
-    const iv2 = setInterval(loadFeedHistory, 60_000); // refresh feed history every minute
+    const iv  = setInterval(refresh, 30_000);
+    const iv2 = setInterval(loadFeedHistory, 15_000); // refresh brain mesh every 15s
     return () => { clearInterval(iv); clearInterval(iv2); };
   }, [refresh, loadFeedHistory]);
 
@@ -1595,7 +1629,7 @@ export default function SilopolisPage() {
 
         <div className="flex flex-wrap justify-center items-center gap-2">
           {[
-            { label: "EARN OKB",          sub: "DEX trade on X Layer",      color: "#34D399", href: "https://potatoswap.xyz", external: true },
+            { label: "EARN OKB",          sub: "DEX trade on X Layer",      color: "#34D399", href: "https://www.okx.com/web3/dex-swap#inputChain=196&inputCurrency=USDT&outputCurrency=OKB", external: true },
             { arrow: true },
             { label: "PAY x402",          sub: "Acquire new relic",         color: "#C084FC", href: "#relic-codex", external: false },
             { arrow: true },
