@@ -45,14 +45,14 @@ class RiskTier:
 RISK_TIERS = [
     RiskTier("SEED",   0.000, 0.00000, 0.00000, 100, False, False,
              "Vault too small — observe markets, build knowledge, zero risk"),
-    RiskTier("MICRO",  0.001, 0.00010, 0.00500,  60, False, True,
+    RiskTier("MICRO",  0.001, 0.00050, 0.01000,  40, False, True,
              "MICRO TIER ACTIVATED · Accumulating OKB · Building vault foundation"),
-    RiskTier("SMALL",  0.010, 0.00100, 0.00300,  50, False, True,
-             "Small positions — compound winners, cut losses fast"),
-    RiskTier("MEDIUM", 0.050, 0.00500, 0.01500,  40, True,  True,
-             "Active trading + LP — rebalance on each heartbeat"),
-    RiskTier("ACTIVE", 0.200, 0.00000, 0.00000,  35, True,  True,
-             "Full strategy — 1% vault per trade, LP + DEX arb"),
+    RiskTier("SMALL",  0.005, 0.00200, 0.01000,  30, False, True,
+             "SMALL TIER · Multi-token portfolio rebalancing · Compound every cycle"),
+    RiskTier("MEDIUM", 0.020, 0.00500, 0.02000,  25, True,  True,
+             "MEDIUM TIER · Active trading + LP — rebalance on each heartbeat"),
+    RiskTier("ACTIVE", 0.100, 0.00000, 0.00000,  20, True,  True,
+             "ACTIVE TIER · Full strategy — 1% vault per trade, LP + DEX arb"),
 ]
 
 
@@ -277,18 +277,22 @@ class RiskGovernor:
             okb_price = 84.0
 
         if self.state.in_campaign:
-            # Aggressive: buy enough to reach 2× buffer in one shot
-            # (builds a real cushion above the buffer, not just barely over it)
-            target_okb = max(0.0, self.OKB_BUFFER * 2.0 - self.state.okb_balance)
-            usdt_needed = target_okb * okb_price
-
-            # Cap per-trade: if USDT known, use 40% of available; else $1.00 max
+            # Aggressive 14-day mode: spend up to 70% of available USDT per trade
+            # Target: grow OKB position every single cycle
             if available_usdt > 0.05:
-                cap = min(available_usdt * 0.40, 5.0)
+                cap = min(available_usdt * 0.70, 10.0)
             else:
-                cap = 1.00
+                # Even with little USDT, still try to buy something
+                cap = max(0.005, available_usdt * 0.70)
 
-            amount = round(min(usdt_needed, cap), 4)
+            # Also factor in deficit — if we're below buffer, close it fully in one shot
+            if self.needs_buyback:
+                deficit_okb = max(0.0, self.OKB_BUFFER * 2.0 - self.state.okb_balance)
+                usdt_needed = deficit_okb * okb_price
+                amount = round(min(usdt_needed, cap), 4)
+            else:
+                # Just accumulate OKB even when not below buffer — it's the campaign goal
+                amount = round(cap, 4)
         else:
             # Normal: close 50% of deficit
             deficit_okb = max(0.0, self.OKB_BUFFER - self.state.okb_balance)

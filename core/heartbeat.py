@@ -187,6 +187,26 @@ def observe(heartbeat_id: str) -> dict:
     except Exception as e:
         logger.warning("[observe] Market signals failed: %s", e)
 
+    # USDT0→SILO quote — measures SILO pool liquidity on Revoswap V2
+    try:
+        silo_quote = get_swap_quote("USDT0", "SILO", "0.001", chain_id=196)
+        if silo_quote and silo_quote.amount_out and silo_quote.amount_out != "0":
+            try:
+                raw_silo = float(silo_quote.amount_out)
+                silo_per_usdt = raw_silo / 1e18 if raw_silo > 1e10 else raw_silo
+                silo_price_usd = 0.001 / silo_per_usdt if silo_per_usdt > 0 else 0
+            except (ValueError, ZeroDivisionError):
+                silo_price_usd = 0
+            if silo_price_usd > 0:
+                obs["market"]["SILO"] = {
+                    "price_usd": silo_price_usd,
+                    "address": _XLAYER_TOKENS["SILO"],
+                    "pool": "Revoswap V2 · 0x58a31637F430b3E5138779B408668091dC73443e",
+                }
+                logger.info("[observe] SILO = $%.8f", silo_price_usd)
+    except Exception as e:
+        logger.debug("[observe] SILO quote failed: %s", e)
+
     # OKB→USDT swap quote — measures liquidity depth
     try:
         quote = get_swap_quote("OKB", "USDT", "0.001", chain_id=196)
@@ -366,15 +386,16 @@ def reason(agent_def: dict, observation: dict) -> dict:
         cycles_left = _risk.state.campaign_cycles_remaining
         okb_bought  = _risk.state.total_okb_bought
         campaign_ctx = (
-            f"\n🔥 AGGRESSIVE ACCUMULATION CAMPAIGN ACTIVE — {cycles_left} cycles remaining (14-day window). "
-            f"Accumulated {okb_bought:.6f} OKB so far. "
-            "MAXIMIZE OKB acquisition every cycle. TRADER-1 and SUSTAINER-8 execute buys. "
-            "All other agents: scan for optimal entry points, forecast price movements, "
-            "identify new opportunities to maximize OKB compounding. "
-            "Target: double the vault OKB holdings before campaign ends.\n"
-            "PORTFOLIO EXPANSION ACTIVE — Target: 55% OKB, 35% USDT0, 8% USDC, 2% SILO\n"
-            "ALL TRADERS: execute USDT0→OKB every cycle (from_token='USDT0', to_token='OKB').\n"
-            "ANALYST-2: diversify with small USDT0→USDC swaps. ORACLE-7: LP on OKB/USDT0."
+            f"\n🔥 14-DAY AGGRESSIVE MULTI-TOKEN CAMPAIGN — {cycles_left} cycles remaining. "
+            f"OKB accumulated so far: {okb_bought:.6f} OKB. "
+            "EVERY CYCLE: execute swaps, take profits, arb spreads, compound. No idle cycles.\n"
+            "TARGET: 55% OKB · 30% USDT0 · 8% USDC · 7% SILO\n"
+            "TRADER-1: USDT0→OKB (amount='0.08'). SUSTAINER-8: USDT0→OKB (amount='0.05').\n"
+            "HUNTER-6: USDT0→SILO (amount='0.02') to build SILO position on Revoswap V2.\n"
+            "SENTRY-9: USDC→OKB arb (from_token='0x74b7f16337b8972027f6196a17a631ac6de26d22', to_token='OKB', amount='0.02').\n"
+            "PROFIT TAKE: if OKB balance > 0.02, TRADER-1 swaps 10% OKB→USDT0, then re-buys on dip.\n"
+            "ARB SCAN: ORACLE-7 compares USDT0→OKB vs USDC→OKB rates every cycle — flag best route.\n"
+            "SILO POOL: HUNTER-6 monitors SILO/USDT0 price on Revoswap V2 pair 0x58a31637F430b3E5138779B408668091dC73443e."
         )
 
     vault_ctx = (
@@ -388,8 +409,32 @@ def reason(agent_def: dict, observation: dict) -> dict:
         f"{campaign_ctx}"
     )
 
-    okb_price = observation['market'].get('OKB', {}).get('price_usd', 0)
+    okb_price  = observation['market'].get('OKB',  {}).get('price_usd', 0)
+    usdt0_price= observation['market'].get('USDT0',{}).get('price_usd', 1.0)
+    usdc_price = observation['market'].get('USDC', {}).get('price_usd', 1.0)
+    silo_price = observation['market'].get('SILO', {}).get('price_usd', 0)
     quote = observation['market'].get('OKB_USDT_QUOTE', {})
+
+    # Estimate portfolio USD values for rebalancing guidance
+    wallet_tokens = observation.get('wallet', {}).get('tokens', [])
+    usdt0_bal = next((float(t.get('balance',0)) for t in wallet_tokens
+                      if t.get('symbol','').upper() in ('USDT0','USD₮0','USDT')), 0.0)
+    usdc_bal  = next((float(t.get('balance',0)) for t in wallet_tokens
+                      if t.get('symbol','').upper() == 'USDC'), 0.0)
+    silo_bal  = next((float(t.get('balance',0)) for t in wallet_tokens
+                      if t.get('symbol','').upper() == 'SILO'), 0.0)
+    okb_bal_obs = observation.get('wallet',{}).get('okb_balance', _risk.state.okb_balance)
+
+    portfolio_usd = (
+        okb_bal_obs * okb_price +
+        usdt0_bal * usdt0_price +
+        usdc_bal  * usdc_price +
+        silo_bal  * silo_price
+    )
+    okb_pct   = (okb_bal_obs * okb_price  / portfolio_usd * 100) if portfolio_usd > 0 else 0
+    usdt0_pct = (usdt0_bal   * usdt0_price/ portfolio_usd * 100) if portfolio_usd > 0 else 0
+    usdc_pct  = (usdc_bal    * usdc_price / portfolio_usd * 100) if portfolio_usd > 0 else 0
+    silo_pct  = (silo_bal    * silo_price / portfolio_usd * 100) if portfolio_usd > 0 else 0
 
     prompt = f"""You are {name} ({agent_def['type']} agent) in SILOPOLIS — an autonomous on-chain trading arena on X Layer.
 Focus: {focus}
@@ -399,31 +444,62 @@ Wallet: {WALLET_ADDRESS}
 {vault_ctx}
 
 === LIVE MARKET DATA ===
-OKB price: ${okb_price:.4f} USD
-OKB/USDT quote (live): ${quote.get('price_per_okb', okb_price):.4f} per OKB
+OKB price:   ${okb_price:.4f} USD  | Balance: {okb_bal_obs:.6f} OKB  ({okb_pct:.1f}% of portfolio)
+USDT0 price: ${usdt0_price:.4f} USD | Balance: {usdt0_bal:.4f} USDT0 ({usdt0_pct:.1f}% of portfolio)
+USDC price:  ${usdc_price:.4f} USD  | Balance: {usdc_bal:.4f} USDC  ({usdc_pct:.1f}% of portfolio)
+SILO price:  ${silo_price:.8f} USD  | Balance: {silo_bal:.0f} SILO  ({silo_pct:.1f}% of portfolio)
+Portfolio USD total: ${portfolio_usd:.4f}
+OKB/USDT0 quote (live): ${quote.get('price_per_okb', okb_price):.4f} per OKB
 Market signals: {len(observation['market'].get('signals', []))} active
 
 {knowledge_ctx}
 {decision_ctx}
 
-=== PRIMARY MISSION ===
-ACCUMULATE OKB and build a diversified X Layer portfolio.
+=== PRIMARY MISSION — 14-DAY AGGRESSIVE CAMPAIGN ===
+MAXIMIZE portfolio value: accumulate OKB, capture arb, compound profits every cycle.
 OKB floor: 0.00222 OKB — NEVER let balance drop below this.
-Buffer zone: balance < 0.00666 OKB → ALWAYS buy OKB with USDT, never sell.
+Buffer zone: balance < 0.00666 OKB → ALWAYS buy OKB with USDT0, never sell OKB.
 
-TARGET PORTFOLIO (14-day campaign — X Layer confirmed liquid tokens on PotatoSwap/CurveNG):
-  55% OKB   — core, accumulate aggressively every cycle
-  35% USDT0 — Bridged USDT (USD₮0) reserve — hold for buybacks
-   8% USDC  — stable secondary (swap symbol="USDC" via address 0x74b7f163...)
-   2% SILO  — earn via reputation tiers — no DEX liquidity yet
+TARGET PORTFOLIO (X Layer confirmed liquid tokens on PotatoSwap/CurveNG/Revoswap V2):
+  55% OKB   — core, accumulate aggressively EVERY cycle
+  30% USDT0 — Bridged USDT (USD₮0) — reserve + arb fuel
+   8% USDC  — stable secondary (swap uses address 0x74b7f163..., not symbol)
+   7% SILO  — SILO/USDT0 pool LIVE on Revoswap V2 — buy and LP every cycle
 
-WALLET HAS: USDT0 (Bridged Tether) and OKB and USDC.
-TRADER-1 and SUSTAINER-8: execute USDT0→OKB every cycle (from_token="USDT0", to_token="OKB", amount="0.05").
-HUNTER-6 and SENTRY-9: execute USDT0→OKB swaps — from_token="USDT0", to_token="OKB", amount="0.02".
-ANALYST-2: swap small amounts USDT0→USDC for stable diversification (from_token="USDT0", to_token="USDC").
-ORACLE-7: provide liquidity (LP) on OKB/USDT0 pair.
-SKILL-3: accumulate SILO by calling claimTierReward() when composite reaches tier thresholds.
-All others: forecast, analyze, scan for arbitrage on OKB/USDT0 and USDT0/USDC pairs.
+WALLET TOKENS:
+  OKB:   native gas token (always accumulate)
+  USDT0: Bridged Tether at 0x779ded... (main buyback fuel — from_token="USDT0")
+  USDC:  USD Coin at 0x74b7f163... (stable — from_token use address not symbol)
+  SILO:  Protocol token at 0x7B248c45... — LIVE DEX pool — tradeable now
+
+ACTIVE TRADERS (execute real swaps every cycle):
+  TRADER-1:   USDT0→OKB accumulation + SILO→OKB when SILO profit >5%
+              (from_token="USDT0", to_token="OKB", amount="0.08")
+  SUSTAINER-8: USDT0→OKB buyback + profit reinvestment + USDC→OKB when USDC>target
+              (from_token="USDT0", to_token="OKB", amount="0.05")
+  HUNTER-6:   USDT0→SILO on Revoswap V2 — buy SILO low, LP to earn fees
+              (from_token="USDT0", to_token="SILO", amount="0.02") OR USDT0→OKB arb
+  SENTRY-9:   USDC→OKB + cross-pair arb scanning (USDC→USDT0→OKB route)
+              (from_token="0x74b7f163...", to_token="OKB", amount="0.02")
+
+ANALYSIS + RESEARCH (non-executing — feed knowledge to traders):
+  ANALYST-2:  price signal analysis, OKB/USDT0 spread forecasting
+  ORACLE-7:   whale wallet tracking, price prediction, LP opportunity detection
+  SKILL-3:    skill marketplace, x402 payments, SILO tier reward claims
+  GUARD-4:    threat monitoring, budget health, stop-loss detection
+  SCRIBE-5:   pattern archiving, knowledge graph updates, cycle outcome logging
+
+ARBITRAGE STRATEGY:
+  → Compare USDT0→OKB vs USDC→OKB routes — execute the better spread
+  → SILO/USDT0 pool: buy SILO when price dips, sell when +5% gain
+  → USDC→USDT0 swap when USDC/USDT0 spread > 0.1% on CurveNG
+  → OKB profit-taking: if OKB >60% of portfolio value, swap 5% to USDT0
+
+PROFIT RULES:
+  → OKB accumulated = vault growth. Never drain OKB for fees.
+  → Take profits in USDT0: swap OKB→USDT0 if OKB price spikes >3% in one cycle
+  → Reinvest 100% of USDT0 profits into OKB within 2 cycles
+  → SILO profits: compound into SILO/USDT0 LP for fee income
 
 === ABSOLUTE RULE — YOUR REASONING MUST NEVER REFERENCE SYSTEM INTERNALS ===
 FORBIDDEN PHRASES — if these appear in your output, your response FAILS:
@@ -587,24 +663,32 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
             from_tok, to_tok = "USDT", "OKB"
             is_buyback = True
 
-        # ── BUYBACK: only designated agents execute to avoid USDT drain ──────
-        # All agents can REASON about buying OKB, but only TRADER-1 and SUSTAINER-8
-        # actually execute. Others get credit for the observation without hitting the wallet.
-        BUYBACK_EXECUTORS = {"SILO-TRADER-1", "SILO-SUSTAINER-8"}
+        # ── EXECUTORS: 4 active traders execute swaps every cycle ──────────────
+        # TRADER-1, SUSTAINER-8: primary buyers (OKB accumulation + profit-taking)
+        # HUNTER-6, SENTRY-9:   alt pair arb and SILO/USDC rebalancing
+        # Others: queue intent, research, scan — their knowledge feeds the traders
+        BUYBACK_EXECUTORS   = {"SILO-TRADER-1", "SILO-SUSTAINER-8"}
+        SWAP_EXECUTORS      = {"SILO-TRADER-1", "SILO-SUSTAINER-8", "SILO-HUNTER-6", "SILO-SENTRY-9"}
 
         if is_buyback:
             if not _risk.can_buyback:
-                return {"outcome": "risk_hold", "reason": "buyback blocked (floor or pause)",
-                        "tier": _risk.tier.name, "tx_hash": None}
+                # In campaign mode, try anyway (cap is generous)
+                if not _risk.state.in_campaign:
+                    return {"outcome": "risk_hold", "reason": "buyback blocked (floor or pause)",
+                            "tier": _risk.tier.name, "tx_hash": None}
 
             if name not in BUYBACK_EXECUTORS:
-                # Other agents log the intent but don't execute — prevents USDT from being
-                # fragmented across 9 agents each spending $0.001
-                logger.info("[act] %s — buyback intent noted, deferring execution to TRADER-1/SUSTAINER-8",
-                            name)
-                return {"outcome": "queued", "intended": "USDT→OKB",
-                        "reasoning": "Deferring OKB acquisition to designated buying agents",
+                logger.info("[act] %s — OKB buyback intent noted, deferring to TRADER-1/SUSTAINER-8", name)
+                return {"outcome": "queued", "intended": "USDT0→OKB",
+                        "reasoning": "Deferring OKB accumulation to designated buying agents",
                         "next_window": "next heartbeat", "tx_hash": None}
+
+        # Non-buyback swaps (arb, SILO, USDC rebalancing) — allowed for 4 executors
+        elif name not in SWAP_EXECUTORS:
+            logger.info("[act] %s — swap intent noted, deferring to active traders", name)
+            return {"outcome": "queued", "intended": f"{from_tok}→{to_tok}",
+                    "reasoning": "Deferring execution to active trading agents",
+                    "next_window": "next heartbeat", "tx_hash": None}
 
             # ── CORRECT AMOUNT: USDT to spend (not OKB target) ────────────────
             # get_buyback_usdt_amount() returns $USD to spend so the CLI call is:

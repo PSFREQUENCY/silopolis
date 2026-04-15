@@ -572,6 +572,38 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
               </a>
             </div>
           )}
+
+          {/* EIP-7702 Delegation proof — featured TX */}
+          <div className="mt-4 pt-3" style={{ borderTop: "1px solid #1A1208" }}>
+            <div className="text-xs tracking-[0.2em] mb-2 font-mono" style={{ color: "#4A3A22" }}>
+              EIP-7702 · ERC-4337 · ATOMIC MULTI-SWAP
+            </div>
+            <div className="text-xs font-mono mb-2 leading-relaxed" style={{ color: "#6B5C3A" }}>
+              Live delegation TX: OKB→WETH + USDT→USD₮0 in one bundled UserOp
+            </div>
+            <div className="flex gap-2">
+              <a
+                href="https://www.oklink.com/x-layer/tx/0x5bd57f0e817b462895662021cf3245f094a3cc1bf8180f24b78c6f6fd0e545eb"
+                target="_blank" rel="noopener noreferrer"
+                className="flex-1 px-2 py-1.5 text-xs font-mono font-bold tracking-widest text-center transition-all"
+                style={{ border: "1px solid #FFD70040", color: "#FFD700", background: "#0A0804" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#1A1A02")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#0A0804")}
+              >
+                ◈ OKLINK ↗
+              </a>
+              <a
+                href="https://dashboard.tenderly.co/tx/0x5bd57f0e817b462895662021cf3245f094a3cc1bf8180f24b78c6f6fd0e545eb"
+                target="_blank" rel="noopener noreferrer"
+                className="flex-1 px-2 py-1.5 text-xs font-mono font-bold tracking-widest text-center transition-all"
+                style={{ border: "1px solid #818CF840", color: "#818CF8", background: "#0A0804" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#0A0814")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#0A0804")}
+              >
+                ⬡ TENDERLY ↗
+              </a>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1686,7 +1718,6 @@ export default function SilopolisPage() {
               </div>
             );
           })()}
-          </div>
 
           {/* Funding callout */}
           {okbBalance < 0.1 && (
