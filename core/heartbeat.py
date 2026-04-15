@@ -123,28 +123,23 @@ WALLET_ADDRESS = os.environ.get("AGENT_WALLET_ADDRESS", "0x872c4c0c5648126a3ac5c
 HEARTBEAT_INTERVAL_SEC = int(os.environ.get("SILOPOLIS_HEARTBEAT_INTERVAL", str(2 * 3600)).split()[0])
 
 
-# Token addresses on X Layer (Chain 196)
+# Token addresses on X Layer (Chain 196) — confirmed liquid pairs
+# USDT0 = Bridged Tether (USD₮0) at 0x779ded... — this is what the wallet holds
+# USDT  = Native USDT at 0x1e4a... — exists but wallet doesn't hold it; route goes USDT0→USDT→OKB
 _XLAYER_TOKENS = {
-    "OKB":  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",  # native — target 50% of portfolio
-    "USDT": "0x1e4a5963abfd975d8c9021ce480b42188849d41d",   # stable base
-    "USDC": "0x74b7f16337b8972027f6196a17a631ac6de22a2",   # stable secondary
-    "WETH": "0x5a77f1443d16ee5761d310e38b62f77f726bc71c",   # 10% target
-    "WBTC": "0xea034fb02eb1808c2cc3adbc15f447b93cbe08e1",   # 10% target
-    "OKT":  "0xdf54b6c6195ea4d948d03bfd818d365cf175cfc2",   # 10% target — OKX native
-    "SILO": os.environ.get("SILO_TOKEN_ADDRESS",            # SILOPOLIS native token — trade + LP
-             "0x7B248c459675A4bF19007B97d1FC49993A76e71C"),
+    "OKB":   "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",  # native OKB — 50% target
+    "USDT0": "0x779ded0c9e1022225f8e0630b35a9b54be713736",  # Bridged USDT (USD₮0) — wallet holds this
+    "USDC":  "0x74b7f16337b8972027f6196a17a631ac6de26d22",  # stable secondary
+    "SILO":  os.environ.get("SILO_TOKEN_ADDRESS",           # SILOPOLIS native token — LP + earn
+              "0x7B248c459675A4bF19007B97d1FC49993A76e71C"),
 }
 
 # Portfolio allocation targets (14-day campaign: April 14 → April 28, 2026)
-# Strategy: 50% OKB (primary) + 10% × 5 X Layer alts + SILO (earn via reputation)
 _PORTFOLIO_TARGETS = {
-    "OKB":  0.50,   # Core — accumulate aggressively
-    "WETH": 0.10,   # Blue-chip hedge
-    "WBTC": 0.10,   # BTC exposure on X Layer
-    "OKT":  0.10,   # OKX ecosystem token
-    "USDT": 0.10,   # Stable reserve for buybacks
-    "USDC": 0.10,   # Stable reserve secondary
-    "SILO": 0.00,   # Earned via reputation tiers — not bought directly, accumulated via claimTierReward()
+    "OKB":   0.55,   # Core — accumulate aggressively every cycle
+    "USDT0": 0.30,   # Bridged USDT — buyback reserve and arb
+    "USDC":  0.10,   # Stable secondary
+    "SILO":  0.05,   # Earn via reputation tiers — LP on SILO/OKB pair
 }
 
 # ─── Observation Phase ────────────────────────────────────────────────────────
@@ -378,9 +373,9 @@ def reason(agent_def: dict, observation: dict) -> dict:
             "identify new opportunities to maximize OKB compounding. "
             "Target: double the vault OKB holdings before campaign ends.\n"
             "PORTFOLIO EXPANSION ACTIVE — Target allocation:\n"
-            "  50% OKB (primary), 10% WETH, 10% WBTC, 10% OKT, 10% USDT (reserve), 10% USDC (reserve)\n"
-            "HUNTER-6 and SENTRY-9: scan WETH, WBTC, OKT pairs for entry opportunities on X Layer DEX.\n"
-            "ANALYST-2 and ORACLE-7: track alt token price vs OKB correlation to optimize rebalance timing."
+            "  55% OKB (primary), 30% USDT0 (bridged USDT reserve), 10% USDC (reserve), 5% SILO\n"
+            "ALL TRADERS: swap USDT0→OKB (from_token='USDT0') every single cycle — maximize OKB position.\n"
+            "ANALYST-2 and ORACLE-7: track OKB/USDT0 spread and signal optimal swap timing."
         )
 
     vault_ctx = (
@@ -417,20 +412,19 @@ ACCUMULATE OKB and build a diversified X Layer portfolio.
 OKB floor: 0.00222 OKB — NEVER let balance drop below this.
 Buffer zone: balance < 0.00666 OKB → ALWAYS buy OKB with USDT, never sell.
 
-TARGET PORTFOLIO (14-day campaign — hold ALL X Layer tokens):
-  50% OKB — core, accumulate aggressively
-  10% WETH — buy small amounts each cycle (USDT→WETH on X Layer DEX)
-  10% WBTC — buy small amounts each cycle (USDT→WBTC on X Layer DEX)
-  10% OKT  — buy small amounts each cycle (USDT→OKT on X Layer DEX)
-  10% USDT — stable reserve (keep for buybacks)
-  10% USDC — stable secondary reserve
+TARGET PORTFOLIO (14-day campaign — X Layer confirmed liquid tokens):
+  55% OKB   — core, accumulate aggressively every cycle
+  30% USDT0 — Bridged USDT (USD₮0) reserve — hold for buybacks and arb
+  10% USDC  — stable secondary reserve
+   5% SILO  — earn via reputation tiers, LP on SILO/OKB pair
 
-HUNTER-6 and SENTRY-9: execute USDT→WETH, USDT→WBTC, USDT→OKT swaps with small amounts.
-TRADER-1 and SUSTAINER-8: execute USDT→OKB buybacks.
-ANALYST-2 and ORACLE-7: provide liquidity (LP) on OKB/USDT, WETH/USDT, SILO/OKB pairs.
+WALLET HAS: USDT0 (Bridged USDT / USD₮0) and OKB. Use USDT0 as from_token for ALL stablecoin swaps.
+TRADER-1 and SUSTAINER-8: execute USDT0→OKB buybacks every cycle (from_token="USDT0", to_token="OKB").
+HUNTER-6 and SENTRY-9: execute USDT0→OKB swaps with small amounts — execute every cycle.
+ANALYST-2 and ORACLE-7: provide liquidity (LP) on OKB/USDT0 and SILO/OKB pairs.
 SKILL-3: accumulate SILO by calling claimTierReward() when composite reaches tier thresholds.
-SILO token (SILOPOLIS native): 0x7B248c459675A4bF19007B97d1FC49993A76e71C — add SILO/OKB liquidity.
-All others: forecast, analyze, scan for arbitrage across ALL X Layer pairs including SILO pairs.
+SILO token (SILOPOLIS native): 0x7B248c459675A4bF19007B97d1FC49993A76e71C
+All others: forecast, analyze, scan for arbitrage on OKB/USDT0 pair.
 
 === ABSOLUTE RULE — YOUR REASONING MUST NEVER REFERENCE SYSTEM INTERNALS ===
 FORBIDDEN PHRASES — if these appear in your output, your response FAILS:
@@ -467,7 +461,8 @@ If window=RESTING (prepare for next heartbeat):
   SKILL/SCRIBE     → "research" | "archive" (build knowledge while waiting)
 
 For "swap" or "queue_swap", params MUST include:
-  {{"from_token": "USDT", "to_token": "OKB", "amount": "0.001"}}
+  {{"from_token": "USDT0", "to_token": "OKB", "amount": "0.5"}}
+NOTE: Use "USDT0" (not "USDT") — wallet holds Bridged USDT (USD₮0). Amount is in USDT0.
 
 Return ONLY valid JSON (no markdown, no code blocks):
 {{
@@ -577,13 +572,13 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
         usdt_balance  = next(
             (float(t.get("balance") or 0)
              for t in wallet_tokens
-             if t.get("symbol", "").upper() in ("USDT", "USDT0", "USDTE")),
+             if t.get("symbol", "").upper() in ("USDT", "USDT0", "USD₮0", "USDTE")),
             0.0,
         )
 
         # ── OKB ACCUMULATION GUARD ────────────────────────────────────────────
         # Detect if this is a buyback (acquiring OKB with stable)
-        is_buyback = to_tok.upper() == "OKB" and from_tok.upper() in ("USDT", "USDC", "ETH", "USDT0")
+        is_buyback = to_tok.upper() == "OKB" and from_tok.upper() in ("USDT", "USDT0", "USD₮0", "USDTE", "USDC", "ETH")
 
         # Force redirect: if OKB is below buffer and agent is trying to sell OKB,
         # flip the direction to a buyback instead.

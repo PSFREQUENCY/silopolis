@@ -122,8 +122,8 @@ def _xlayer_swap_quote(
         data = raw.get("data", raw)
         if isinstance(data, list):
             data = data[0] if data else {}
-        amount_out = str(data.get("toTokenAmount") or data.get("amount_out") or "0")
-        price_impact = float(data.get("priceImpactPercentage") or data.get("price_impact") or 0)
+        amount_out = str(data.get("toAmount") or data.get("toTokenAmount") or data.get("amount_out") or "0")
+        price_impact = float(data.get("priceImpact") or data.get("priceImpactPercentage") or data.get("price_impact") or 0)
         router_name = data.get("dex", data.get("router", "PotatoSwap"))
         calldata_raw = onchainos.swap_calldata(from_token, to_token, amount,
                                                chain="xlayer", slippage=slippage_pct)
@@ -238,9 +238,10 @@ def execute_swap(
             tx = (
                 raw.get("txHash") or raw.get("tx_hash") or raw.get("hash") or
                 raw.get("transactionHash") or raw.get("transaction_hash") or
-                data.get("txHash") or data.get("tx_hash") or data.get("hash") or
-                data.get("transactionHash") or data.get("transaction_hash") or
-                data.get("result", {}).get("txHash") or data.get("result", {}).get("hash") or
+                data.get("swapTxHash") or data.get("txHash") or data.get("tx_hash") or
+                data.get("hash") or data.get("transactionHash") or data.get("transaction_hash") or
+                data.get("result", {}).get("txHash") or data.get("result", {}).get("swapTxHash") or
+                data.get("result", {}).get("hash") or
                 ""
             )
 
@@ -261,8 +262,8 @@ def execute_swap(
                 except Exception as hist_err:
                     logger.debug("DEX history fallback failed: %s", hist_err)
 
-            amount_out = str(data.get("toTokenAmount") or data.get("amountOut") or
-                             data.get("amount_out") or "")
+            amount_out = str(data.get("toAmount") or data.get("toTokenAmount") or
+                             data.get("amountOut") or data.get("amount_out") or "")
             return SwapResult(success=True, tx_hash=tx, amount_out=amount_out)
 
         return SwapResult(success=False, error=raw.get("error", raw.get("msg", "swap failed")))

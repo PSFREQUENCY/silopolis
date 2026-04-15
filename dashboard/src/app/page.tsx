@@ -365,14 +365,13 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
   const implScore    = risk.total_trades > 0 ? Math.min(100, ((risk.winning_trades ?? 0) / risk.total_trades) * 100 + 10) : 10;
   const improvScore  = Math.min(100, risk.win_rate_pct + (cycleCount * 2));
 
-  // 14-day portfolio expansion: 50% OKB + 10% × 5 X Layer tokens
+  // X Layer confirmed liquid tokens — 14-day campaign targets
   const basket = [
-    { symbol: "OKB",  pct: 50, color: "#DAA520", desc: "Core — accumulate always" },
-    { symbol: "WETH", pct: 10, color: "#60A5FA", desc: "Blue-chip hedge" },
-    { symbol: "WBTC", pct: 10, color: "#F97316", desc: "BTC exposure" },
-    { symbol: "OKT",  pct: 10, color: "#22d3ee", desc: "OKX ecosystem" },
-    { symbol: "USDT", pct: 10, color: "#34D399", desc: "Buyback reserve" },
-    { symbol: "USDC", pct: 10, color: "#818CF8", desc: "Stable secondary" },
+    { symbol: "OKB",  pct: 50, color: "#DAA520", desc: "Core — accumulate every cycle" },
+    { symbol: "USDT", pct: 20, color: "#34D399", desc: "Stable base — buyback reserve" },
+    { symbol: "USDC", pct: 15, color: "#818CF8", desc: "Stable secondary — arb spread" },
+    { symbol: "USDG", pct: 10, color: "#22d3ee", desc: "Gravity USD — X Layer native" },
+    { symbol: "SILO", pct:  5, color: "#C084FC", desc: "Protocol token — LP on SILO/OKB" },
   ];
 
   return (
@@ -999,6 +998,8 @@ export default function SilopolisPage() {
   const [classified, setClassified] = useState(false); // flicker on load
   const [feedHistory, setFeedHistory] = useState<TxHistoryItem[]>([]);
   const [timelineIdx, setTimelineIdx] = useState<number>(9999); // large default → always shows all nodes until data loads
+  const [okbPrice, setOkbPrice] = useState<number>(0);
+  const [okbBalance, setOkbBalance] = useState<number>(0);
 
   // Real agent roster — mirrors actual SQLite data (83 cycles, 9 agents, 237 excavations)
   const DEMO_AGENTS: Agent[] = [
@@ -1025,14 +1026,18 @@ export default function SilopolisPage() {
   const refresh = useCallback(async () => {
     try {
       const opts = { headers: FETCH_HEADERS };
-      const [lb, st] = await Promise.all([
+      const [lb, st, pr, rk] = await Promise.all([
         fetch(`${API_BASE}/api/leaderboard`, opts).then(r => r.json()),
         fetch(`${API_BASE}/api/status`, opts).then(r => r.json()),
+        fetch(`${API_BASE}/api/prices`, opts).then(r => r.ok ? r.json() : null),
+        fetch(`${API_BASE}/api/risk`, opts).then(r => r.ok ? r.json() : null),
       ]);
       const list: Agent[] = lb.leaderboard ?? DEMO_AGENTS;
       setAgents(list);
       setStatus(st);
       setTotalTx(list.reduce((s, a) => s + a.tx_count, 0));
+      if (pr?.prices?.OKB) setOkbPrice(pr.prices.OKB);
+      if (rk?.okb_balance != null) setOkbBalance(rk.okb_balance);
     } catch {
       setAgents(DEMO_AGENTS);
       setTotalTx(DEMO_AGENTS.reduce((s, a) => s + a.tx_count, 0));
@@ -1042,55 +1047,34 @@ export default function SilopolisPage() {
     }
   }, []); // eslint-disable-line
 
-  // Load feed history for mesh timeline — merges DB decisions + on-chain proof TXs
+  // Load feed history for brain mesh — ONLY real on-chain TXs from onchain-proof
+  // DB decisions (analyze/forecast/patrol) go in the cipher feed text list, NOT the brain
   const loadFeedHistory = useCallback(async () => {
     try {
       const opts = { headers: FETCH_HEADERS };
-      // Fetch both sources in parallel
-      const [feedRes, proofRes] = await Promise.allSettled([
-        fetch(`${API_BASE}/api/feed?limit=500`, opts).then(r => r.ok ? r.json() : null),
-        fetch(`${API_BASE}/api/onchain-proof?limit=300`, opts).then(r => r.ok ? r.json() : null),
-      ]);
+      const proofRes = await fetch(`${API_BASE}/api/onchain-proof?limit=500`, opts);
+      if (!proofRes.ok) return;
+      const proofData = await proofRes.json();
 
-      const feedData   = feedRes.status === "fulfilled" ? feedRes.value : null;
-      const proofData  = proofRes.status === "fulfilled" ? proofRes.value : null;
-      const items: { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string }[] = feedData?.feed ?? [];
-
-      // Build a set of known tx_hashes from feed to avoid duplication
-      const knownHashes = new Set(items.filter(f => f.tx_hash && f.tx_hash !== "DRY_RUN").map(f => f.tx_hash));
-
-      // Merge on-chain proof trades not already in the feed
-      const proofItems: TxHistoryItem[] = [];
-      if (proofData?.trades) {
+      const txItems: TxHistoryItem[] = [];
+      if (Array.isArray(proofData?.trades)) {
         for (const t of proofData.trades) {
-          if (t.tx_hash && !knownHashes.has(t.tx_hash)) {
-            // Assign to trader since we don't know which agent did it
-            proofItems.push({
-              ts: t.ts,
-              agent: "SILO-TRADER-1",
-              action: "SWAP",
-              tx_hash: t.tx_hash,
-              color: "#DAA520",
-              is_x402: false,
-            });
-          }
+          if (!t.tx_hash) continue;
+          txItems.push({
+            ts: t.ts,
+            agent: "SILO-TRADER-1",
+            action: `${t.from_token ?? "?"}→${t.to_token ?? "?"}`,
+            tx_hash: t.tx_hash,
+            color: "#DAA520",
+            is_x402: false,
+          });
         }
       }
 
-      // Main feed items (reversed so oldest-first for timeline ordering)
-      const feedItems: TxHistoryItem[] = [...items].reverse().map(f => ({
-        ts: f.ts,
-        agent: f.agent,
-        action: f.action,
-        tx_hash: (f.tx_hash && f.tx_hash !== "DRY_RUN") ? f.tx_hash : undefined,
-        color: AGENT_COLORS[f.agent] ?? "#DAA520",
-        is_x402: f.agent === "SILO-SKILL-3" || (f.reasoning ?? "").toLowerCase().includes("x402"),
-      }));
-
-      // Merge: on-chain proof first (older), then DB feed items (newer)
-      const merged = [...proofItems, ...feedItems];
-      setFeedHistory(merged);
-      setTimelineIdx(merged.length - 1); // always show latest = auto-advance
+      // Oldest first so timeline advances left→right
+      txItems.reverse();
+      setFeedHistory(txItems);
+      setTimelineIdx(txItems.length - 1); // show latest
     } catch {
       // keep existing
     }
@@ -1115,7 +1099,8 @@ export default function SilopolisPage() {
         headers: { ...FETCH_HEADERS, "Content-Type": "application/json" },
       });
       if (!resp.ok) console.warn("Cycle trigger failed:", resp.status, await resp.text());
-      setTimeout(refresh, 8000); // wait 8s for heartbeat to start, then refresh leaderboard
+      setTimeout(refresh, 8000);        // leaderboard refreshes after 8s
+      setTimeout(loadFeedHistory, 45000); // brain mesh reloads after 45s (swap needs time to land on-chain)
     } catch (e) {
       console.error("Cycle trigger error:", e);
     } finally {
@@ -1483,6 +1468,127 @@ export default function SilopolisPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* AGENT PORTFOLIO — PROMINENT LIVE ALLOCATION                         */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      <section id="portfolio" style={{ background: "#06050200", borderTop: "1px solid #1A1208", borderBottom: "1px solid #1A1208", padding: "48px 0" }}>
+        <div className="max-w-7xl mx-auto px-6">
+          {/* Header */}
+          <div className="flex items-end justify-between mb-8">
+            <div>
+              <div className="text-xs tracking-[0.3em] mb-2 font-mono" style={{ color: "#B8860B" }}>◈ LIVE ALLOCATION · X LAYER CHAIN 196</div>
+              <h2 className="text-4xl font-black tracking-tight" style={{ color: "#DAA520", letterSpacing: "-0.01em" }}>
+                AGENT PORTFOLIO
+              </h2>
+              <p className="text-sm mt-1 font-mono" style={{ color: "#4A3A22" }}>
+                14-day campaign · OKB accumulation mode · {lastRefresh.toLocaleTimeString()}
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-black font-mono" style={{ color: "#DAA520" }}>
+                {okbBalance.toFixed(6)} <span className="text-lg" style={{ color: "#6B5C3A" }}>OKB</span>
+              </div>
+              {okbPrice > 0 && (
+                <div className="text-sm font-mono mt-1" style={{ color: "#9A8060" }}>
+                  ≈ ${(okbBalance * okbPrice).toFixed(2)} USD · @${okbPrice.toFixed(2)}/OKB
+                </div>
+              )}
+              <div className="text-xs font-mono mt-1" style={{ color: "#4A3A22" }}>
+                WALLET: 0x872c...78d
+              </div>
+            </div>
+          </div>
+
+          {/* Portfolio allocation bars — one per token */}
+          <div className="grid gap-4 md:grid-cols-5">
+            {basket.map((t) => {
+              const isOKB = t.symbol === "OKB";
+              const balance = isOKB ? okbBalance : 0;
+              const usdVal  = isOKB && okbPrice > 0 ? okbBalance * okbPrice : 0;
+              const totalPortfolioUsd = okbPrice > 0 ? okbBalance * okbPrice / 0.50 : 0; // estimate from OKB at 50%
+              const targetUsd = totalPortfolioUsd * (t.pct / 100);
+              const currentPct = targetUsd > 0 && isOKB ? Math.min(100, (usdVal / targetUsd) * 100) : (isOKB ? 0 : 0);
+              return (
+                <div key={t.symbol}
+                  style={{
+                    background: "#0A0806",
+                    border: `1px solid ${t.color}30`,
+                    padding: "20px 16px",
+                    position: "relative",
+                    overflow: "hidden",
+                  }}
+                >
+                  {/* Glow strip top */}
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: t.color, opacity: 0.6 }} />
+
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <div className="text-xl font-black font-mono" style={{ color: t.color }}>{t.symbol}</div>
+                      <div className="text-xs font-mono mt-0.5" style={{ color: "#4A3A22" }}>{t.desc}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-black font-mono" style={{ color: "#DAA520" }}>{t.pct}%</div>
+                      <div className="text-xs font-mono" style={{ color: "#4A3A22" }}>TARGET</div>
+                    </div>
+                  </div>
+
+                  {/* Allocation bar */}
+                  <div style={{ background: "#1A1208", height: 6, borderRadius: 0, overflow: "hidden" }}>
+                    <div
+                      style={{
+                        width: `${isOKB ? currentPct : 2}%`,
+                        height: "100%",
+                        background: t.color,
+                        boxShadow: `0 0 8px ${t.color}80`,
+                        transition: "width 1s ease",
+                        minWidth: "2%",
+                      }}
+                    />
+                  </div>
+
+                  {/* Balance */}
+                  <div className="mt-3 font-mono text-xs" style={{ color: "#6B5C3A" }}>
+                    {isOKB ? (
+                      <span>
+                        <span style={{ color: "#DAA520" }}>{balance.toFixed(6)}</span> OKB
+                        {usdVal > 0 && <span style={{ color: "#4A3A22" }}> · ${usdVal.toFixed(2)}</span>}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#2A2018" }}>FUND WALLET TO ACCUMULATE</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Funding callout */}
+          {okbBalance < 0.1 && (
+            <div className="mt-6 px-5 py-4 font-mono text-sm flex items-center gap-3"
+              style={{
+                background: "rgba(218,165,32,0.06)",
+                border: "1px solid rgba(218,165,32,0.3)",
+                boxShadow: "0 0 20px rgba(218,165,32,0.08)",
+              }}
+            >
+              <span style={{ color: "#DAA520", fontSize: "1.2rem" }}>▲</span>
+              <div>
+                <span style={{ color: "#DAA520", fontWeight: "bold" }}>VAULT NEEDS OKB TO TRADE</span>
+                <span style={{ color: "#6B5C3A" }}> — Send OKB to </span>
+                <a
+                  href="https://web3.okx.com/portfolio/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/analysis"
+                  target="_blank" rel="noopener"
+                  style={{ color: "#DAA520", textDecoration: "underline" }}
+                >
+                  0x872c...478d
+                </a>
+                <span style={{ color: "#6B5C3A" }}> on X Layer (Chain 196) to activate live DEX trading.</span>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
