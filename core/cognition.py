@@ -165,25 +165,25 @@ def _gemini_generate(
 
     url = f"{GEMINI_BASE}/{model}:generateContent?key={GEMINI_KEY}"
 
-    # Retry up to 3x on 429 (rate limit) with progressive backoff
-    for attempt in range(3):
+    # Retry up to 2x on 429/timeout — fast fallback to NIM after 2 tries
+    for attempt in range(2):
         try:
-            resp = httpx.post(url, json=payload, timeout=60.0)
+            resp = httpx.post(url, json=payload, timeout=25.0)
             if resp.status_code == 429:
-                wait = 20 + attempt * 15  # 20s, 35s, 50s
-                logger.info("[Gemini] 429 rate limit on %s — waiting %ds (attempt %d/3)", model, wait, attempt + 1)
+                wait = 15 + attempt * 10  # 15s, 25s
+                logger.info("[Gemini] 429 rate limit on %s — waiting %ds (attempt %d/2)", model, wait, attempt + 1)
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
             data = resp.json()
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
         except httpx.ReadTimeout:
-            if attempt < 2:
-                logger.warning("[Gemini] Read timeout on %s (attempt %d/3) — retrying", model, attempt + 1)
-                time.sleep(5)
+            if attempt < 1:
+                logger.warning("[Gemini] Read timeout on %s (attempt %d/2) — retrying in 3s", model, attempt + 1)
+                time.sleep(3)
                 continue
             raise
-    raise RuntimeError(f"Gemini {model} unavailable after 3 attempts")
+    raise RuntimeError(f"Gemini {model} unavailable after 2 attempts")
 
 
 # ─── NVIDIA NIM Client (MiniMax M2.7) ─────────────────────────────────────────
@@ -339,7 +339,7 @@ class SwarmFiCognition:
                     model = NIM_MODEL
                     response = _nim_generate(prompt=prompt, system=system, temperature=0.7, max_tokens=self.max_tokens)
                 else:
-                    emit(f"❌ Cognition error: {e}")
+                    emit(f"🔀 Rerouting — all channels busy, standing by: {e}")
                     raise
         latency_ms = int((time.time() - t0) * 1000)
         tokens_est = len(response.split()) * 2

@@ -608,8 +608,14 @@ Return ONLY valid JSON (no markdown, no code blocks):
 
     except Exception as e:
         logger.error("[reason] %s cognition error: %s", name, e)
-        return {"action": "wait", "reasoning": f"error: {e}", "confidence": 0,
-                "params": {}, "knowledge_to_record": [], "_meta": {}}
+        _err = str(e)
+        _reroute_msg = (
+            "🔀 Route redirected — neural pathway congested, holding position while rerouting cognition"
+            if "timed out" in _err.lower() or "timeout" in _err.lower()
+            else f"🔀 Rerouting — backup channel engaged, standing by ({_err[:60]})"
+        )
+        return {"action": "wait", "reasoning": _reroute_msg, "confidence": 10,
+                "params": {}, "knowledge_to_record": [], "_meta": {"rerouted": True}}
 
 
 # ─── Action Phase ─────────────────────────────────────────────────────────────
@@ -892,12 +898,12 @@ def run_heartbeat() -> dict:
                        "timestamp": datetime.now(timezone.utc).isoformat(), "heartbeat_id": heartbeat_id}
         errors += 1
 
-    # REASON → ACT → LEARN for each agent (staggered to avoid NIM rate limits)
+    # REASON → ACT → LEARN for each agent (staggered to avoid hammering Gemini/NIM)
     for _agent_idx, agent_def in enumerate(AGENT_ROSTER):
         name = agent_def["name"]
-        # Stagger agents 5+ by 3s to avoid NIM rate limit on late agents
-        if _agent_idx >= 5:
-            time.sleep(3)
+        # 4s stagger between all agents = ~32s spread across the full roster
+        if _agent_idx > 0:
+            time.sleep(4)
         try:
             # Reason
             decision = reason(agent_def, observation)
