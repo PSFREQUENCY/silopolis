@@ -1048,6 +1048,7 @@ export default function SilopolisPage() {
   const [feedHistory, setFeedHistory] = useState<TxHistoryItem[]>([]);
   const [timelineIdx, setTimelineIdx] = useState<number>(9999); // large default → always shows all nodes until data loads
   const feedHistoryLenRef = useRef<number>(0); // track previous length to auto-advance only on new entries
+  const lastFeedTsRef    = useRef<string>("");  // most recent ts seen — used for incremental appends
   const [okbPrice, setOkbPrice] = useState<number>(0);
   const [okbBalance, setOkbBalance] = useState<number>(0);
   const [walletBal, setWalletBal] = useState<Record<string, number>>({});
@@ -1115,32 +1116,51 @@ export default function SilopolisPage() {
   // On-chain TXs from onchain-proof overlaid as golden confirmed nodes
   const loadFeedHistory = useCallback(async () => {
     const opts = { headers: FETCH_HEADERS };
+    const isFirstLoad = feedHistoryLenRef.current === 0;
 
-    // ── Phase 1: DB feed — fast (SQLite), set immediately so brain mesh shows now
+    type RawFeedItem = { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string };
+    const toItem = (f: RawFeedItem): TxHistoryItem => ({
+      ts: f.ts,
+      agent: f.agent,
+      action: f.action,
+      tx_hash: (f.tx_hash && f.tx_hash !== "DRY_RUN") ? f.tx_hash : undefined,
+      color: AGENT_COLORS[f.agent] ?? "#4A3A22",
+      is_x402: f.agent === "SILO-SKILL-3" || (f.reasoning ?? "").toLowerCase().includes("x402"),
+    });
+
+    // ── Phase 1: DB feed ───────────────────────────────────────────────────────
     try {
-      const feedData = await fetch(`${API_BASE}/api/feed?limit=2000`, opts)
+      // Initial load: fetch full history (no practical cap).
+      // Subsequent polls: fetch last 50, append only items newer than lastFeedTsRef.
+      const limit = isFirstLoad ? 9999 : 50;
+      const feedData = await fetch(`${API_BASE}/api/feed?limit=${limit}`, opts)
         .then(r => r.ok ? r.json() : null);
-      const rawFeed: { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string }[] =
-        (feedData?.feed ?? []).slice().reverse();
-      if (rawFeed.length > 0) {
-        const feedItems: TxHistoryItem[] = rawFeed.map(f => ({
-          ts: f.ts,
-          agent: f.agent,
-          action: f.action,
-          tx_hash: (f.tx_hash && f.tx_hash !== "DRY_RUN") ? f.tx_hash : undefined,
-          color: AGENT_COLORS[f.agent] ?? "#4A3A22",
-          is_x402: f.agent === "SILO-SKILL-3" || (f.reasoning ?? "").toLowerCase().includes("x402"),
-        }));
-        setFeedHistory(feedItems);
-        // Only auto-advance to latest when new entries arrive (not on every refresh)
-        if (feedItems.length > feedHistoryLenRef.current) {
-          feedHistoryLenRef.current = feedItems.length;
-          setTimelineIdx(feedItems.length - 1);
+      const rawFeed: RawFeedItem[] = (feedData?.feed ?? []).slice().reverse(); // oldest→newest
+
+      if (rawFeed.length === 0) return;
+
+      if (isFirstLoad) {
+        const items = rawFeed.map(toItem);
+        setFeedHistory(items);
+        feedHistoryLenRef.current = items.length;
+        setTimelineIdx(items.length - 1);
+        lastFeedTsRef.current = items[items.length - 1]?.ts ?? "";
+      } else {
+        // Append only items strictly newer than what we already have
+        const newItems = rawFeed.filter(f => f.ts > lastFeedTsRef.current).map(toItem);
+        if (newItems.length > 0) {
+          setFeedHistory(prev => {
+            const next = [...prev, ...newItems];
+            feedHistoryLenRef.current = next.length;
+            setTimelineIdx(next.length - 1);
+            lastFeedTsRef.current = newItems[newItems.length - 1].ts;
+            return next;
+          });
         }
       }
     } catch { /* keep existing */ }
 
-    // ── Phase 2: On-chain proof — slower (OnchainOS), overlay gold nodes on top
+    // ── Phase 2: On-chain proof — overlay gold confirmed nodes (every load) ────
     try {
       const proofData = await fetch(`${API_BASE}/api/onchain-proof?limit=100`, opts)
         .then(r => r.ok ? r.json() : null);
@@ -1161,7 +1181,7 @@ export default function SilopolisPage() {
         });
       }
 
-      // Merge: proof items first, then DB items (deduplicated)
+      // Merge: proof items first, then DB items (deduplicated by tx_hash)
       setFeedHistory(prev => {
         const dbItems = prev.filter(f => !f.tx_hash || !confirmedHashes.has(f.tx_hash));
         const merged = [...proofItems, ...dbItems];
