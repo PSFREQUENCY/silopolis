@@ -91,6 +91,7 @@ class VaultState:
         if time.time() - self.day_start >= 86400:
             self.daily_spent_okb = 0.0
             self.day_start = time.time()
+            save_vault_state(self)  # persist so restarts see the fresh counter
 
 
 # ─── Risk Governor ────────────────────────────────────────────────────────────
@@ -246,8 +247,12 @@ class RiskGovernor:
             logger.info("[risk] Trading paused for %.0f more seconds", remaining)
             return False
         if self.state.daily_spent_okb >= t.max_daily_okb:
-            logger.info("[risk] Daily OKB budget exhausted (%.6f / %.6f)", self.state.daily_spent_okb, t.max_daily_okb)
-            return False
+            # In campaign mode, allow trading to continue — stablecoin trades don't spend OKB
+            # and the campaign goal is maximum activity every cycle.
+            if not self.state.in_campaign:
+                logger.info("[risk] Daily OKB budget exhausted (%.6f / %.6f)", self.state.daily_spent_okb, t.max_daily_okb)
+                return False
+            logger.debug("[risk] Campaign override: daily OKB budget nominal but continuing")
         return True
 
     def get_trade_size(self) -> float:

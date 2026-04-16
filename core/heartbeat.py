@@ -847,8 +847,11 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
                         profit_okb = amount_out_human - float(safe_amount)
                     elif from_tok.upper() == "OKB":
                         profit_okb = (amount_out_human / okb_price) - float(safe_amount)
-                # else: amount_out unknown — break-even, don't touch win counter
-                _risk.record_trade(float(safe_amount), profit_okb)
+                # Only record OKB as "spent" when actually spending OKB.
+                # Stablecoin/token trades (USDT→SILO, USDC→OKB, SILO→USDT) do not
+                # consume OKB, so daily_spent_okb must not accumulate their amounts.
+                okb_spent = float(safe_amount) if from_tok.upper() == "OKB" else 0.0
+                _risk.record_trade(okb_spent, profit_okb)
 
         outcome_label = "executed_swap" if (live and result.success) else "simulated_swap"
         return {
