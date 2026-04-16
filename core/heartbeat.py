@@ -926,9 +926,9 @@ def run_heartbeat() -> dict:
     # REASON → ACT → LEARN for each agent (staggered to avoid hammering Gemini/NIM)
     for _agent_idx, agent_def in enumerate(AGENT_ROSTER):
         name = agent_def["name"]
-        # 4s stagger between all agents = ~32s spread across the full roster
+        # 12s stagger between all agents = ~96s spread — prevents NIM rate-limit cascade
         if _agent_idx > 0:
-            time.sleep(4)
+            time.sleep(12)
         try:
             # Reason
             decision = reason(agent_def, observation)
