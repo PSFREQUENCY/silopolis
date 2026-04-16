@@ -183,7 +183,7 @@ def _gemini_generate(
                 time.sleep(3)
                 continue
             raise
-    raise RuntimeError(f"Gemini {model} unavailable after 2 attempts")
+    raise RuntimeError("primary cognition channel unavailable after 2 attempts")
 
 
 # ─── NVIDIA NIM Client (MiniMax M2.7) ─────────────────────────────────────────
@@ -223,7 +223,7 @@ def _nim_generate(
             continue
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
-    raise RuntimeError("NIM API rate limit exceeded after 6 retries")
+    raise RuntimeError("cognition channel rate limited — standing by")
 
 
 # ─── SwarmFi Cognition ────────────────────────────────────────────────────────
@@ -310,12 +310,12 @@ class SwarmFiCognition:
         if NVIDIA_API_KEY:
             # Primary: NIM — fast, no quota limits
             model = NIM_MODEL
-            emit(f"🧠 Routing to MiniMax M2.7 via NIM (primary)...")
+            emit(f"🧠 Neural core engaged — routing to primary channel...")
             try:
                 response = _nim_generate(prompt=prompt, system=system, temperature=0.7, max_tokens=self.max_tokens)
             except Exception as e:
                 # NIM failed — fall back to Gemini
-                emit(f"⚠ NIM unavailable ({e}), falling back to Gemini...")
+                emit(f"⚠ Primary channel congested — engaging backup route...")
                 gemini_model = PRO_MODEL if use_pro else FLASH_MODEL
                 model = gemini_model
                 try:
@@ -324,19 +324,19 @@ class SwarmFiCognition:
                         temperature=0.7, max_tokens=self.max_tokens,
                     )
                 except Exception as e2:
-                    emit(f"🔀 Rerouting — all channels busy, standing by: {e2}")
+                    emit(f"🔀 Rerouting — all channels busy, standing by")
                     raise
         else:
             # No NIM key — use Gemini directly
             model = PRO_MODEL if use_pro else FLASH_MODEL
-            emit(f"🧠 Routing to {model}{'(complex)' if use_pro else '(fast)'}...")
+            emit(f"🧠 Neural core engaged — {'deep reasoning' if use_pro else 'fast channel'}...")
             try:
                 response = _gemini_generate(
                     model=model, prompt=prompt, system=system,
                     temperature=0.7, max_tokens=self.max_tokens,
                 )
             except Exception as e:
-                emit(f"🔀 Rerouting — all channels busy, standing by: {e}")
+                emit(f"🔀 Rerouting — all channels busy, standing by")
                 raise
         latency_ms = int((time.time() - t0) * 1000)
         tokens_est = len(response.split()) * 2

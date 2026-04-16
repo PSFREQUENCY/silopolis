@@ -620,7 +620,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
         _reroute_msg = (
             "🔀 Route redirected — neural pathway congested, holding position while rerouting cognition"
             if "timed out" in _err.lower() or "timeout" in _err.lower()
-            else f"🔀 Rerouting — backup channel engaged, standing by ({_err[:60]})"
+            else "🔀 Rerouting — backup channel engaged, standing by"
         )
         return {"action": "wait", "reasoning": _reroute_msg, "confidence": 10,
                 "params": {}, "knowledge_to_record": [], "_meta": {"rerouted": True}}
