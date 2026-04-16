@@ -20,12 +20,13 @@ interface TickerToken {
 
 // Seed values — immediately overwritten from live API on mount
 const SEED_TOKENS: TickerToken[] = [
-  { sym: "OKB",   price: 84.89,     change: +2.8,    highlight: true  },
-  { sym: "BTC",   price: 74497.0,   change: +0.7               },
-  { sym: "ETH",   price: 2373.82,   change: +1.9               },
-  { sym: "SOL",   price: 85.90,     change: +3.4               },
-  { sym: "USDT",  price: 1.0000,    change:  0.0               },
-  { sym: "USDC",  price: 0.9999,    change:  0.01              },
+  { sym: "OKB",   price: 84.89,      change: +2.8,  highlight: true },
+  { sym: "BTC",   price: 74497.0,    change: +0.7                   },
+  { sym: "ETH",   price: 2373.82,    change: +1.9                   },
+  { sym: "SOL",   price: 85.90,      change: +3.4                   },
+  { sym: "USDT",  price: 1.0000,     change:  0.0                   },
+  { sym: "USDC",  price: 0.9999,     change:  0.01                  },
+  { sym: "SILO",  price: 0.00000015, change:  0.0,  highlight: true },
 ];
 
 function fmtPrice(p: number): string {
