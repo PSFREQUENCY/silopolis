@@ -2010,26 +2010,37 @@ export default function SilopolisPage() {
       {/* ─── Footer ──────────────────────────────────────────────────────── */}
       <footer style={{ borderTop: "1px solid #1A1208", background: "#050402" }} className="px-6 py-8">
         {/* Ticker strip */}
-        {(okbPrice > 0 || siloPrice > 0) && (
-          <div className="overflow-hidden mb-6" style={{ borderBottom: "1px solid #1A1208", paddingBottom: "10px" }}>
-            <div className="flex gap-8 animate-marquee whitespace-nowrap font-mono text-xs tracking-[0.15em]">
-              {[...Array(4)].flatMap((_, i) => [
-                okbPrice > 0 && (
-                  <span key={`okb-${i}`} style={{ color: "#B8860B" }}>
-                    OKB <span style={{ color: "#DAA520" }}>${okbPrice.toFixed(2)}</span>
-                  </span>
-                ),
-                siloPrice > 0 && (
-                  <span key={`silo-${i}`} style={{ color: "#6B5A2A" }}>
-                    $SILO <span style={{ color: "#9B7A3A" }}>${siloPrice < 0.01 ? siloPrice.toExponential(3) : siloPrice.toFixed(6)}</span>
-                    <span style={{ color: "#4A3A22" }}> · X LAYER</span>
-                  </span>
-                ),
-                <span key={`div-${i}`} style={{ color: "#2A1E0A" }}>◈</span>,
-              ]).filter(Boolean)}
+        {(okbPrice > 0 || siloPrice > 0) && (() => {
+          const siloFmt = siloPrice > 0
+            ? (siloPrice < 0.001 ? siloPrice.toExponential(3) : siloPrice.toFixed(6))
+            : null;
+          const tickerItem = (
+            <span className="inline-flex items-center gap-6 px-4">
+              {okbPrice > 0 && (
+                <span style={{ color: "#B8860B" }}>
+                  OKB&nbsp;<span style={{ color: "#DAA520" }}>${okbPrice.toFixed(2)}</span>
+                </span>
+              )}
+              <span style={{ color: "#2A1E0A" }}>◈</span>
+              {siloFmt && (
+                <span style={{ color: "#7A6535" }}>
+                  $SILO&nbsp;<span style={{ color: "#A0853F" }}>${siloFmt}</span>
+                  <span style={{ color: "#3A2C16" }}>&nbsp;·&nbsp;X LAYER</span>
+                </span>
+              )}
+              <span style={{ color: "#2A1E0A" }}>◈</span>
+            </span>
+          );
+          return (
+            <div className="overflow-hidden mb-6 font-mono text-xs tracking-[0.15em]"
+              style={{ borderBottom: "1px solid #1A1208", paddingBottom: "10px" }}>
+              <div className="animate-marquee whitespace-nowrap inline-block">
+                {tickerItem}{tickerItem}{tickerItem}{tickerItem}
+                {tickerItem}{tickerItem}{tickerItem}{tickerItem}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
             <div className="text-lg font-black tracking-[0.3em]">
