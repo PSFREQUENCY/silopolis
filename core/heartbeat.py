@@ -389,13 +389,17 @@ def reason(agent_def: dict, observation: dict) -> dict:
             f"\n🔥 14-DAY AGGRESSIVE MULTI-TOKEN CAMPAIGN — {cycles_left} cycles remaining. "
             f"OKB accumulated so far: {okb_bought:.6f} OKB. "
             "EVERY CYCLE: execute swaps, take profits, arb spreads, compound. No idle cycles.\n"
-            "TARGET: 55% OKB · 30% USDT0 · 8% USDC · 7% SILO\n"
-            "TRADER-1: USDT0→OKB (amount='0.08'). SUSTAINER-8: USDT0→OKB (amount='0.05').\n"
-            "HUNTER-6: USDT0→SILO (amount='0.02') to build SILO position on Revoswap V2.\n"
-            "SENTRY-9: USDC→OKB arb (from_token='0x74b7f16337b8972027f6196a17a631ac6de26d22', to_token='OKB', amount='0.02').\n"
+            "TARGET: 55% OKB · 30% USDT0 · 8% USDC · 7% SILO\n\n"
+            "MANDATORY TRADE ASSIGNMENTS (every cycle — action='swap', no exceptions):\n"
+            "  TRADER-1:    action='swap', from_token='USDT0', to_token='OKB',  amount='0.08'\n"
+            "  SUSTAINER-8: action='swap', from_token='USDT0', to_token='OKB',  amount='0.05'\n"
+            "  HUNTER-6:    action='swap', from_token='USDT0', to_token='SILO', amount='0.02'  ← SILO/USDT0 pool on Revoswap V2\n"
+            "  SENTRY-9:    action='swap', from_token='USDC',  to_token='OKB',  amount='0.02'  ← use address 0x74b7f16337b8972027f6196a17a631ac6de26d22 for USDC\n\n"
+            "SILO POOL: pair 0x58a31637F430b3E5138779B408668091dC73443e on Revoswap V2. "
+            "HUNTER-6 MUST execute USDT0→SILO every cycle. SILO is live and liquid — do NOT skip.\n"
+            "USDC→OKB: SENTRY-9 MUST execute every cycle. Builds OKB position via USDC route.\n"
             "PROFIT TAKE: if OKB balance > 0.02, TRADER-1 swaps 10% OKB→USDT0, then re-buys on dip.\n"
-            "ARB SCAN: ORACLE-7 compares USDT0→OKB vs USDC→OKB rates every cycle — flag best route.\n"
-            "SILO POOL: HUNTER-6 monitors SILO/USDT0 price on Revoswap V2 pair 0x58a31637F430b3E5138779B408668091dC73443e."
+            "ARB: ORACLE-7 compares USDT0→OKB vs USDC→OKB spreads — flag best route to traders."
         )
 
     vault_ctx = (
@@ -472,15 +476,13 @@ WALLET TOKENS:
   USDC:  USD Coin at 0x74b7f163... (stable — from_token use address not symbol)
   SILO:  Protocol token at 0x7B248c45... — LIVE DEX pool — tradeable now
 
-ACTIVE TRADERS (execute real swaps every cycle):
-  TRADER-1:   USDT0→OKB accumulation + SILO→OKB when SILO profit >5%
-              (from_token="USDT0", to_token="OKB", amount="0.08")
-  SUSTAINER-8: USDT0→OKB buyback + profit reinvestment + USDC→OKB when USDC>target
-              (from_token="USDT0", to_token="OKB", amount="0.05")
-  HUNTER-6:   USDT0→SILO on Revoswap V2 — buy SILO low, LP to earn fees
-              (from_token="USDT0", to_token="SILO", amount="0.02") OR USDT0→OKB arb
-  SENTRY-9:   USDC→OKB + cross-pair arb scanning (USDC→USDT0→OKB route)
-              (from_token="0x74b7f163...", to_token="OKB", amount="0.02")
+ACTIVE TRADERS — MUST execute action='swap' every cycle (waiting is NOT allowed):
+  TRADER-1:   from_token="USDT0", to_token="OKB",  amount="0.08"  → OKB accumulation
+  SUSTAINER-8: from_token="USDT0", to_token="OKB", amount="0.05"  → OKB buyback + reinvest
+  HUNTER-6:   from_token="USDT0", to_token="SILO", amount="0.02"  → SILO/USDT0 on Revoswap V2
+              SILO token: 0x7B248c459675A4bF19007B97d1FC49993A76e71C — LIVE pool, must trade
+  SENTRY-9:   from_token="USDC",  to_token="OKB",  amount="0.02"  → USDC→OKB arb route
+              USDC address: 0x74b7f16337b8972027f6196a17a631ac6de26d22
 
 ANALYSIS + RESEARCH (non-executing — feed knowledge to traders):
   ANALYST-2:  price signal analysis, OKB/USDT0 spread forecasting
@@ -689,28 +691,48 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
                         "reasoning": "Deferring OKB accumulation to designated buying agents",
                         "next_window": "next heartbeat", "tx_hash": None}
 
-        # Non-buyback swaps (arb, SILO, USDC rebalancing) — allowed for 4 executors
+            # ── CORRECT AMOUNT: USDT to spend on OKB buyback ─────────────────
+            usdt_to_spend = _risk.get_buyback_usdt_amount(okb_price, usdt_balance)
+            logger.info("[act] %s — OKB BUYBACK: spend $%.4f USDT at OKB=$%.2f (vault: %.6f OKB)",
+                        name, usdt_to_spend, okb_price, _risk.state.okb_balance)
+            safe_amount = str(usdt_to_spend)
+
+        # Non-buyback swaps (SILO, USDC arb, alt pairs) — allowed for all 4 executors
         elif name not in SWAP_EXECUTORS:
             logger.info("[act] %s — swap intent noted, deferring to active traders", name)
             return {"outcome": "queued", "intended": f"{from_tok}→{to_tok}",
                     "reasoning": "Deferring execution to active trading agents",
                     "next_window": "next heartbeat", "tx_hash": None}
 
-            # ── CORRECT AMOUNT: USDT to spend (not OKB target) ────────────────
-            # get_buyback_usdt_amount() returns $USD to spend so the CLI call is:
-            # "swap execute --from USDT --to OKB --readable-amount <USD_AMOUNT>"
-            usdt_to_spend = _risk.get_buyback_usdt_amount(okb_price, usdt_balance)
-            logger.info("[act] %s — OKB BUYBACK: spend $%.4f USDT at OKB=$%.2f (vault: %.6f OKB)",
-                        name, usdt_to_spend, okb_price, _risk.state.okb_balance)
-            safe_amount = str(usdt_to_spend)  # in USDT — CLI interprets as "spend this much USDT"
-
         else:
-            # Normal speculative trade — check full can_trade gate
+            # Non-buyback speculative trade (SILO, USDC arb, etc.)
             if not _risk.can_trade:
                 status = _risk.status_dict()
                 return {"outcome": "risk_hold", "reason": status["description"],
                         "tier": status["tier"], "tx_hash": None}
-            safe_amount = str(_risk.get_trade_size())
+
+            # ── AMOUNT ROUTING: use USDT-denominated size for stablecoin→token swaps
+            # get_trade_size() returns OKB units — useless for USDT0→SILO or USDC→OKB
+            agent_amount = 0.0
+            try:
+                agent_amount = float(params.get("amount", 0) or 0)
+            except (TypeError, ValueError):
+                pass
+
+            if from_tok.upper() in ("USDT", "USDT0", "USD₮0", "USDTE", "USDC") or \
+               from_tok.startswith("0x"):
+                # Stablecoin or ERC-20 address → amount is in that token's units (USDT/USDC)
+                # Use agent-suggested amount if reasonable, else fallback to 5% of balance
+                max_spend = max(0.005, usdt_balance * 0.50)
+                if agent_amount > 0:
+                    safe_amount = str(round(min(agent_amount, max_spend), 4))
+                else:
+                    safe_amount = str(round(max(0.01, min(0.05, usdt_balance * 0.10)), 4))
+                logger.info("[act] %s — %s→%s: spending %s %s (usdt_bal=%.4f)",
+                            name, from_tok, to_tok, safe_amount, from_tok, usdt_balance)
+            else:
+                # OKB-denominated trade
+                safe_amount = str(_risk.get_trade_size())
 
         if not safe_amount or float(safe_amount) == 0:
             return {"outcome": "risk_hold", "reason": "trade size zero — protecting OKB floor", "tx_hash": None}
