@@ -170,7 +170,7 @@ def _gemini_generate(
         try:
             resp = httpx.post(url, json=payload, timeout=25.0)
             if resp.status_code == 429:
-                wait = 15 + attempt * 10  # 15s, 25s
+                wait = 30 + attempt * 15  # 30s, 45s — longer waits to clear per-minute quota
                 logger.info("[Gemini] 429 rate limit on %s — waiting %ds (attempt %d/2)", model, wait, attempt + 1)
                 time.sleep(wait)
                 continue
@@ -213,7 +213,7 @@ def _nim_generate(
     }
     # Retry up to 6 times on 429 with aggressive backoff — never fall back to Gemini on rate limit
     for attempt in range(6):
-        resp = httpx.post(f"{NIM_BASE}/chat/completions", json=payload, headers=headers, timeout=20.0)
+        resp = httpx.post(f"{NIM_BASE}/chat/completions", json=payload, headers=headers, timeout=45.0)
         if resp.status_code == 404:
             raise EnvironmentError(f"NIM model {NIM_MODEL!r} not found on cloud API (404).")
         if resp.status_code == 429:
