@@ -295,9 +295,9 @@ class SwarmFiCognition:
                 )
 
         # Step 2: Route to model
+        # NIM (MiniMax M2.7) is primary when available — no rate limit issues.
+        # Gemini is secondary fallback for when NIM is unavailable.
         use_pro = _should_use_pro(prompt)
-        model = PRO_MODEL if use_pro else FLASH_MODEL
-        emit(f"🧠 Routing to {model}{'(complex)' if use_pro else '(fast)'}...")
 
         system = self.system_context or (
             f"You are {self.agent_name}, an autonomous AI agent in the SILOPOLIS swarm on X Layer. "
@@ -306,41 +306,38 @@ class SwarmFiCognition:
         )
 
         t0 = time.time()
-        try:
-            response = _gemini_generate(
-                model=model,
-                prompt=prompt,
-                system=system,
-                temperature=0.7,
-                max_tokens=self.max_tokens,
-            )
-        except Exception as e:
-            if model == PRO_MODEL:
-                emit(f"⚠ Pro unavailable ({e}), falling back to Flash...")
-                model = FLASH_MODEL
+
+        if NVIDIA_API_KEY:
+            # Primary: NIM — fast, no quota limits
+            model = NIM_MODEL
+            emit(f"🧠 Routing to MiniMax M2.7 via NIM (primary)...")
+            try:
+                response = _nim_generate(prompt=prompt, system=system, temperature=0.7, max_tokens=self.max_tokens)
+            except Exception as e:
+                # NIM failed — fall back to Gemini
+                emit(f"⚠ NIM unavailable ({e}), falling back to Gemini...")
+                gemini_model = PRO_MODEL if use_pro else FLASH_MODEL
+                model = gemini_model
                 try:
                     response = _gemini_generate(
-                        model=model,
-                        prompt=prompt,
-                        system=system,
-                        temperature=0.7,
-                        max_tokens=self.max_tokens,
+                        model=gemini_model, prompt=prompt, system=system,
+                        temperature=0.7, max_tokens=self.max_tokens,
                     )
                 except Exception as e2:
-                    if NVIDIA_API_KEY:
-                        emit(f"⚠ Gemini Flash unavailable ({e2}), routing to MiniMax M2.7 via NIM...")
-                        model = NIM_MODEL
-                        response = _nim_generate(prompt=prompt, system=system, temperature=0.7, max_tokens=self.max_tokens)
-                    else:
-                        raise
-            else:
-                if NVIDIA_API_KEY:
-                    emit(f"⚠ Gemini Flash unavailable ({e}), routing to MiniMax M2.7 via NIM...")
-                    model = NIM_MODEL
-                    response = _nim_generate(prompt=prompt, system=system, temperature=0.7, max_tokens=self.max_tokens)
-                else:
-                    emit(f"🔀 Rerouting — all channels busy, standing by: {e}")
+                    emit(f"🔀 Rerouting — all channels busy, standing by: {e2}")
                     raise
+        else:
+            # No NIM key — use Gemini directly
+            model = PRO_MODEL if use_pro else FLASH_MODEL
+            emit(f"🧠 Routing to {model}{'(complex)' if use_pro else '(fast)'}...")
+            try:
+                response = _gemini_generate(
+                    model=model, prompt=prompt, system=system,
+                    temperature=0.7, max_tokens=self.max_tokens,
+                )
+            except Exception as e:
+                emit(f"🔀 Rerouting — all channels busy, standing by: {e}")
+                raise
         latency_ms = int((time.time() - t0) * 1000)
         tokens_est = len(response.split()) * 2
         emit(f"✅ Response ready ({latency_ms}ms, ~{tokens_est} tokens, model={model})")
