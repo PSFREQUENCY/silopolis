@@ -333,7 +333,7 @@ const TIER_COLORS: Record<string, string> = {
 const OKB_FLOOR = 0.00222;
 const OKB_BUFFER = OKB_FLOOR * 3; // 0.00666
 
-function RiskPanel({ apiBase }: { apiBase: string }) {
+function RiskPanel({ apiBase, liveOkbBalance }: { apiBase: string; liveOkbBalance?: number }) {
   const [risk, setRisk] = useState<RiskStatus | null>(null);
   const [knowledgeCount, setKnowledgeCount] = useState(0);
   const [cycleCount, setCycleCount] = useState(0);
@@ -363,9 +363,10 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
   const dailyPct = risk.daily_budget_okb > 0
     ? Math.min(100, (risk.daily_spent_okb / risk.daily_budget_okb) * 100) : 0;
 
-  // OKB floor health — how far above floor the balance is
-  const floorPct = Math.min(100, (risk.okb_balance / OKB_BUFFER) * 100);
-  const floorColor = risk.okb_balance < OKB_FLOOR ? "#F87171" : risk.okb_balance < OKB_BUFFER ? "#FBBF24" : "#34D399";
+  // OKB floor health — prefer live on-chain balance over stale vault snapshot
+  const displayOkb = liveOkbBalance ?? risk.okb_balance;
+  const floorPct = Math.min(100, (displayOkb / OKB_BUFFER) * 100);
+  const floorColor = displayOkb < OKB_FLOOR ? "#F87171" : displayOkb < OKB_BUFFER ? "#FBBF24" : "#34D399";
 
   // Portfolio management feed bars (0–100 derived scores)
   const logicScore   = Math.max(0, Math.min(100, 80 - risk.consecutive_losses * 25 + (risk.win_rate_pct > 50 ? 20 : 0)));
@@ -391,7 +392,7 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
           </div>
           <div className="text-right">
             <div className="text-2xl font-black font-mono" style={{ color: tc }}>
-              {risk.okb_balance.toFixed(6)}
+              {displayOkb.toFixed(6)}
             </div>
             <div className="text-xs font-mono" style={{ color: "#4A3A22" }}>OKB VAULT</div>
           </div>
@@ -431,8 +432,8 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
           <div className="flex justify-between text-xs font-mono mb-1">
             <span style={{ color: floorColor }}>OKB FLOOR GUARD</span>
             <span style={{ color: floorColor }}>
-              {risk.okb_balance.toFixed(6)} / {OKB_BUFFER.toFixed(6)} OKB
-              {risk.okb_balance < OKB_FLOOR ? " ⚠ BELOW FLOOR" : risk.okb_balance < OKB_BUFFER ? " ↑ BUYING" : " ✓ SAFE"}
+              {displayOkb.toFixed(6)} / {OKB_BUFFER.toFixed(6)} OKB
+              {displayOkb < OKB_FLOOR ? " ⚠ BELOW FLOOR" : displayOkb < OKB_BUFFER ? " ↑ BUYING" : " ✓ SAFE"}
             </span>
           </div>
           <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ background: "#1A1208" }}>
@@ -515,7 +516,7 @@ function RiskPanel({ apiBase }: { apiBase: string }) {
 const WALLET = "0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d";
 const EXPLORER = `https://www.oklink.com/x-layer/address/${WALLET}/aa`;
 
-function WalletPanel({ apiBase }: { apiBase: string }) {
+function WalletPanel({ apiBase, liveOkbBalance }: { apiBase: string; liveOkbBalance?: number }) {
   const [risk, setRisk] = useState<RiskStatus | null>(null);
   const [knowledge, setKnowledge] = useState<Array<{ observation_type?: string; type?: string; key: string; value: string; avg_confidence?: number; confidence?: number }>>([]);
   useEffect(() => {
@@ -556,7 +557,7 @@ function WalletPanel({ apiBase }: { apiBase: string }) {
           {risk && (
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-2xl font-black font-mono" style={{ color: tc }}>{risk.okb_balance.toFixed(6)}</div>
+                <div className="text-2xl font-black font-mono" style={{ color: tc }}>{(liveOkbBalance ?? risk.okb_balance).toFixed(6)}</div>
                 <div className="text-xs font-mono mt-0.5" style={{ color: "#4A3A22" }}>OKB BALANCE · {risk.tier} TIER</div>
               </div>
               <a
@@ -1633,7 +1634,7 @@ export default function SilopolisPage() {
                 </div>
               )}
               <div className="text-xs font-mono mt-1" style={{ color: "#4A3A22" }}>
-                WALLET: 0x872c...78d
+                WALLET: {WALLET.slice(0, 6)}...{WALLET.slice(-6)}
               </div>
             </div>
           </div>
@@ -1705,7 +1706,11 @@ export default function SilopolisPage() {
                         {hasBalance ? (
                           <span>
                             <span style={{ color: "#DAA520" }}>
-                              {t.symbol === "OKB" ? bal.toFixed(6) : bal.toFixed(4)}
+                              {t.symbol === "OKB"
+                                ? bal.toFixed(6)
+                                : bal >= 1000
+                                  ? bal.toLocaleString(undefined, { maximumFractionDigits: 0 })
+                                  : bal.toFixed(4)}
                             </span>
                             {" "}{t.symbol}
                             {usdVal > 0 && <span style={{ color: "#4A3A22" }}> · ${usdVal.toFixed(2)}</span>}
@@ -1721,30 +1726,6 @@ export default function SilopolisPage() {
             );
           })()}
 
-          {/* Funding callout */}
-          {okbBalance < 0.1 && (
-            <div className="mt-6 px-5 py-4 font-mono text-sm flex items-center gap-3"
-              style={{
-                background: "rgba(218,165,32,0.06)",
-                border: "1px solid rgba(218,165,32,0.3)",
-                boxShadow: "0 0 20px rgba(218,165,32,0.08)",
-              }}
-            >
-              <span style={{ color: "#DAA520", fontSize: "1.2rem" }}>▲</span>
-              <div>
-                <span style={{ color: "#DAA520", fontWeight: "bold" }}>VAULT NEEDS OKB TO TRADE</span>
-                <span style={{ color: "#6B5C3A" }}> — Send OKB to </span>
-                <a
-                  href="https://web3.okx.com/portfolio/0x872c4c0c5648126a3ac5cb140a2f1622a0b2478d/analysis"
-                  target="_blank" rel="noopener"
-                  style={{ color: "#DAA520", textDecoration: "underline" }}
-                >
-                  0x872c...478d
-                </a>
-                <span style={{ color: "#6B5C3A" }}> on X Layer (Chain 196) to activate live DEX trading.</span>
-              </div>
-            </div>
-          )}
         </div>
       </section>
 
@@ -1775,7 +1756,7 @@ export default function SilopolisPage() {
 
         {/* Risk Panel */}
         <div className="mb-8">
-          <RiskPanel apiBase={API_BASE} />
+          <RiskPanel apiBase={API_BASE} liveOkbBalance={okbBalance > 0 ? okbBalance : undefined} />
         </div>
 
         {/* Mastery tier legend */}
@@ -1831,7 +1812,7 @@ export default function SilopolisPage() {
           </a>
         </div>
         <div className="space-y-4">
-          <WalletPanel apiBase={API_BASE} />
+          <WalletPanel apiBase={API_BASE} liveOkbBalance={okbBalance > 0 ? okbBalance : undefined} />
           <TradeFeed apiBase={API_BASE} />
         </div>
       </section>
