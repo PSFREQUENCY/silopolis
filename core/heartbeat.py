@@ -652,6 +652,16 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
         from_tok = params.get("from_token", "OKB")
         to_tok   = params.get("to_token", "USDT")
 
+        # ── MANDATORY PAIR LOCKS — override LLM if it drifts from assigned route ──
+        # HUNTER-6 is the SILO specialist. Always USDT0→SILO regardless of LLM decision.
+        # SENTRY-9 is the USDC→OKB arb route. Always USDC→OKB.
+        if name == "SILO-HUNTER-6":
+            from_tok, to_tok = "USDT0", "SILO"
+            logger.info("[act] HUNTER-6 pair lock: USDT0→SILO")
+        elif name == "SILO-SENTRY-9" and to_tok.upper() not in ("OKB",):
+            from_tok, to_tok = "USDC", "OKB"
+            logger.info("[act] SENTRY-9 pair lock: USDC→OKB")
+
         obs_market    = (observation or {}).get("market", {})
         okb_price     = obs_market.get("OKB", {}).get("price_usd", 84.0) or 84.0
         wallet_tokens = (observation or {}).get("wallet", {}).get("tokens", [])

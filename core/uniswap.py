@@ -241,9 +241,18 @@ def execute_swap(
         slippage_pct = str(slippage_bps / 100)
         from_resolved = _resolve_xlayer_token(from_token)
         to_resolved   = _resolve_xlayer_token(to_token)
-        raw = onchainos.swap_execute(from_resolved, to_resolved, amount,
-                                     chain="xlayer", slippage=slippage_pct)
-        logger.info("onchainos swap_execute raw response: %s", json.dumps(raw)[:500])
+        # Retry once on "another order processing" (code 20008) — wait for pending tx to clear
+        for _attempt in range(2):
+            raw = onchainos.swap_execute(from_resolved, to_resolved, amount,
+                                         chain="xlayer", slippage=slippage_pct)
+            logger.info("onchainos swap_execute raw response: %s", json.dumps(raw)[:500])
+            err_msg = str(raw.get("error", ""))
+            if "another order processing" in err_msg or "20008" in err_msg:
+                if _attempt == 0:
+                    logger.info("onchainos: pending tx detected (20008) — waiting 15s before retry")
+                    import time as _time; _time.sleep(15)
+                    continue
+            break
 
         # Determine success
         success = raw.get("ok") or raw.get("success") or raw.get("txHash") or \
