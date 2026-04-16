@@ -653,6 +653,21 @@ function WalletPanel({ apiBase, liveOkbBalance }: { apiBase: string; liveOkbBala
   );
 }
 
+// ─── Feed reasoning sanitizer ────────────────────────────────────────────────
+// Rewrites raw Python exception strings stored in the DB into sentient agent language.
+function sanitizeReasoning(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const s = raw.trim();
+  if (s.startsWith("🔀")) return s; // already rerouted language
+  if (/^error:/i.test(s) || /timed out/i.test(s) || /read operation/i.test(s)) {
+    if (/timed out/i.test(s) || /read operation/i.test(s)) {
+      return "🔀 Route redirected — neural pathway congested, holding position while rerouting cognition";
+    }
+    return `🔀 Rerouting — backup channel engaged, standing by`;
+  }
+  return s;
+}
+
 // ─── Trade History Graph Feed ─────────────────────────────────────────────────
 
 type FeedRow = { time: string; action: string; agent: string; detail: string; color: string; icon: string; txLink?: string; txHash?: string; isX402?: boolean; outcome?: string };
@@ -701,7 +716,7 @@ function TradeFeed({ apiBase }: { apiBase: string }) {
               const ts = new Date(item.ts);
               const time = ts.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
               const detail = item.reasoning
-                ? `${item.reasoning} · ${item.confidence}%`
+                ? `${sanitizeReasoning(item.reasoning)} · ${item.confidence}%`
                 : `OKB $${data.okb_price?.toFixed(2)} · ${item.confidence}%`;
               const isX402 = item.agent === "SILO-SKILL-3" || (item.reasoning ?? "").toLowerCase().includes("x402");
               return { time, action: item.action, agent: item.agent, detail, color, icon, txLink: item.tx_link, txHash: item.tx_hash, isX402, outcome: item.outcome };
