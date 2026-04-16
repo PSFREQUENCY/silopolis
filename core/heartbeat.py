@@ -261,11 +261,14 @@ def observe(heartbeat_id: str) -> dict:
 # ─── Reasoning Phase ─────────────────────────────────────────────────────────
 
 def _extract_json(text: str) -> dict | None:
-    """Robustly extract a JSON object from Gemini response."""
+    """Robustly extract a JSON object from model response (Gemini, NIM/MiniMax, etc.)."""
     import re
 
+    # Strip <think>...</think> blocks (MiniMax M2.7 / DeepSeek chain-of-thought)
+    cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
     # Strip markdown code fences
-    cleaned = re.sub(r"```(?:json)?\s*", "", text).replace("```", "").strip()
+    cleaned = re.sub(r"```(?:json)?\s*", "", cleaned).replace("```", "").strip()
 
     # Try 1: direct parse
     try:
