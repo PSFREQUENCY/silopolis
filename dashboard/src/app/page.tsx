@@ -1049,6 +1049,7 @@ export default function SilopolisPage() {
   const [timelineIdx, setTimelineIdx] = useState<number>(9999); // large default → always shows all nodes until data loads
   const feedHistoryLenRef = useRef<number>(0); // track previous length to auto-advance only on new entries
   const [okbPrice, setOkbPrice] = useState<number>(0);
+  const [siloPrice, setSiloPrice] = useState<number>(0);
   const [okbBalance, setOkbBalance] = useState<number>(0);
   const [walletBal, setWalletBal] = useState<Record<string, number>>({});
   const [walletUsd, setWalletUsd] = useState<Record<string, number>>({});
@@ -1088,6 +1089,7 @@ export default function SilopolisPage() {
       setStatus(st);
       setTotalTx(list.reduce((s, a) => s + a.tx_count, 0));
       if (pr?.prices?.OKB) setOkbPrice(pr.prices.OKB);
+      if (pr?.prices?.SILO) setSiloPrice(pr.prices.SILO);
     } catch {
       setAgents(DEMO_AGENTS);
       setTotalTx(DEMO_AGENTS.reduce((s, a) => s + a.tx_count, 0));
@@ -2007,6 +2009,27 @@ export default function SilopolisPage() {
 
       {/* ─── Footer ──────────────────────────────────────────────────────── */}
       <footer style={{ borderTop: "1px solid #1A1208", background: "#050402" }} className="px-6 py-8">
+        {/* Ticker strip */}
+        {(okbPrice > 0 || siloPrice > 0) && (
+          <div className="overflow-hidden mb-6" style={{ borderBottom: "1px solid #1A1208", paddingBottom: "10px" }}>
+            <div className="flex gap-8 animate-marquee whitespace-nowrap font-mono text-xs tracking-[0.15em]">
+              {[...Array(4)].flatMap((_, i) => [
+                okbPrice > 0 && (
+                  <span key={`okb-${i}`} style={{ color: "#B8860B" }}>
+                    OKB <span style={{ color: "#DAA520" }}>${okbPrice.toFixed(2)}</span>
+                  </span>
+                ),
+                siloPrice > 0 && (
+                  <span key={`silo-${i}`} style={{ color: "#6B5A2A" }}>
+                    $SILO <span style={{ color: "#9B7A3A" }}>${siloPrice < 0.01 ? siloPrice.toExponential(3) : siloPrice.toFixed(6)}</span>
+                    <span style={{ color: "#4A3A22" }}> · X LAYER</span>
+                  </span>
+                ),
+                <span key={`div-${i}`} style={{ color: "#2A1E0A" }}>◈</span>,
+              ]).filter(Boolean)}
+            </div>
+          </div>
+        )}
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
             <div className="text-lg font-black tracking-[0.3em]">

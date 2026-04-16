@@ -906,20 +906,26 @@ def live_prices():
         except Exception as e:
             logger.debug("OKX ticker %s failed: %s", sym, e)
 
-    # ── Fallback: SQLite market_snapshots for OKB if OKX unreachable
-    if "OKB" not in prices:
-        try:
-            db_path = Path(__file__).parent.parent / "data" / "silopolis.db"
-            conn = sqlite3.connect(str(db_path))
-            conn.row_factory = sqlite3.Row
+    # ── Fallback + SILO: SQLite market_snapshots
+    try:
+        db_path = Path(__file__).parent.parent / "data" / "silopolis.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        if "OKB" not in prices:
             snap = conn.execute(
                 "SELECT price_usd FROM market_snapshots WHERE token_pair LIKE 'OKB%' ORDER BY timestamp DESC LIMIT 1"
             ).fetchone()
-            conn.close()
             if snap:
                 prices["OKB"] = float(snap["price_usd"])
-        except Exception:
-            pass
+        # SILO price from heartbeat observe snapshots (X Layer Revoswap V2 — not on OKX)
+        silo_snap = conn.execute(
+            "SELECT price_usd FROM market_snapshots WHERE token_pair LIKE 'SILO%' ORDER BY timestamp DESC LIMIT 1"
+        ).fetchone()
+        if silo_snap and float(silo_snap["price_usd"]) > 0:
+            prices["SILO"] = float(silo_snap["price_usd"])
+        conn.close()
+    except Exception:
+        pass
 
     return {"prices": prices, "change24h": change24h, "ok": bool(prices)}
 

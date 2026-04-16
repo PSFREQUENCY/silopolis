@@ -20,6 +20,13 @@ module.exports = {
       },
       animation: {
         "ping-slow": "ping 3s cubic-bezier(0,0,0.2,1) infinite",
+        "marquee":   "marquee 28s linear infinite",
+      },
+      keyframes: {
+        marquee: {
+          "0%":   { transform: "translateX(0%)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
       },
     },
   },
