@@ -394,14 +394,17 @@ def reason(agent_def: dict, observation: dict) -> dict:
             "EVERY CYCLE: execute swaps, take profits, arb spreads, compound. No idle cycles.\n"
             "TARGET: 55% OKB · 30% USDT0 · 8% USDC · 7% SILO\n\n"
             "MANDATORY TRADE ASSIGNMENTS (every cycle — action='swap', no exceptions):\n"
-            "  TRADER-1:    action='swap', from_token='USDT0', to_token='OKB',  amount='0.08'\n"
-            "  SUSTAINER-8: action='swap', from_token='USDT0', to_token='OKB',  amount='0.05'\n"
-            "  HUNTER-6:    action='swap', from_token='USDT0', to_token='SILO', amount='0.02'  ← SILO/USDT0 pool on Revoswap V2\n"
-            "  SENTRY-9:    action='swap', from_token='USDC',  to_token='OKB',  amount='0.02'  ← use address 0x74b7f16337b8972027f6196a17a631ac6de26d22 for USDC\n\n"
-            "SILO POOL: pair 0x58a31637F430b3E5138779B408668091dC73443e on Revoswap V2. "
-            "HUNTER-6 MUST execute USDT0→SILO every cycle. SILO is live and liquid — do NOT skip.\n"
-            "USDC→OKB: SENTRY-9 MUST execute every cycle. Builds OKB position via USDC route.\n"
-            "PROFIT TAKE: if OKB balance > 0.02, TRADER-1 swaps 10% OKB→USDT0, then re-buys on dip.\n"
+            "  TRADER-1:    from_token='USDT0', to_token='OKB',  amount='0.08'  [if USDT0 low → USDC→OKB or OKB→USDT0]\n"
+            "  SUSTAINER-8: from_token='USDT0', to_token='OKB',  amount='0.05'  [if USDT0 low → USDC→OKB]\n"
+            "  HUNTER-6:    from_token='USDT0', to_token='SILO', amount='0.05'  ← Revoswap V2 pair 0x58a3...\n"
+            "               [if SILO position > 100k and USDT0 low → SILO→USDT0 profit-take]\n"
+            "  SENTRY-9:    from_token='USDC',  to_token='OKB',  amount='0.05'  ← address 0x74b7f163...\n\n"
+            "DIVERSITY RULES — all 4 tokens must be active every 2 cycles:\n"
+            "  OKB:   accumulate via USDT0→OKB and USDC→OKB every cycle\n"
+            "  USDT0: replenish via OKB→USDT0 profit-take when OKB > 0.012 and USDT0 < 0.12\n"
+            "  USDC:  deploy via USDC→OKB (SENTRY-9) — do not let USDC sit idle\n"
+            "  SILO:  buy via USDT0→SILO (HUNTER-6); profit-take SILO→USDT0 when SILO > 100k\n\n"
+            "PROFIT RULES: take OKB profits when OKB > 60% of portfolio → swap 5% to USDT0.\n"
             "ARB: ORACLE-7 compares USDT0→OKB vs USDC→OKB spreads — flag best route to traders."
         )
 
@@ -652,16 +655,6 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
         from_tok = params.get("from_token", "OKB")
         to_tok   = params.get("to_token", "USDT")
 
-        # ── MANDATORY PAIR LOCKS — override LLM if it drifts from assigned route ──
-        # HUNTER-6 is the SILO specialist. Always USDT0→SILO regardless of LLM decision.
-        # SENTRY-9 is the USDC→OKB arb route. Always USDC→OKB.
-        if name == "SILO-HUNTER-6":
-            from_tok, to_tok = "USDT0", "SILO"
-            logger.info("[act] HUNTER-6 pair lock: USDT0→SILO")
-        elif name == "SILO-SENTRY-9" and to_tok.upper() not in ("OKB",):
-            from_tok, to_tok = "USDC", "OKB"
-            logger.info("[act] SENTRY-9 pair lock: USDC→OKB")
-
         obs_market    = (observation or {}).get("market", {})
         okb_price     = obs_market.get("OKB", {}).get("price_usd", 84.0) or 84.0
         wallet_tokens = (observation or {}).get("wallet", {}).get("tokens", [])
@@ -671,6 +664,60 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
              if t.get("symbol", "").upper() in ("USDT", "USDT0", "USD₮0", "USDTE")),
             0.0,
         )
+        usdc_balance  = next(
+            (float(t.get("balance") or 0)
+             for t in wallet_tokens
+             if t.get("symbol", "").upper() == "USDC"),
+            0.0,
+        )
+        silo_balance  = next(
+            (float(t.get("balance") or 0)
+             for t in wallet_tokens
+             if t.get("symbol", "").upper() == "SILO"),
+            0.0,
+        )
+        okb_live_bal  = (observation or {}).get("wallet", {}).get("okb_balance", _risk.state.okb_balance)
+
+        # ── MANDATORY PAIR LOCKS — override LLM if it drifts from assigned route ──
+        # HUNTER-6 is the SILO specialist. Normally USDT0→SILO but profit-takes SILO→USDT0
+        # when SILO position is large and USDT0 is depleted.
+        # SENTRY-9 is the USDC→OKB arb route. Always USDC→OKB.
+        if name == "SILO-HUNTER-6":
+            SILO_PROFIT_THRESHOLD = 100_000  # take profits above 100k SILO
+            if silo_balance > SILO_PROFIT_THRESHOLD and usdt_balance < 0.10:
+                # Take SILO profit to replenish USDT0
+                from_tok, to_tok = "SILO", "USDT0"
+                logger.info("[act] HUNTER-6 profit-take lock: SILO→USDT0 (silo=%.0f, usdt=%.4f)",
+                            silo_balance, usdt_balance)
+            else:
+                from_tok, to_tok = "USDT0", "SILO"
+                logger.info("[act] HUNTER-6 pair lock: USDT0→SILO")
+        elif name == "SILO-SENTRY-9" and to_tok.upper() not in ("OKB",):
+            from_tok, to_tok = "USDC", "OKB"
+            logger.info("[act] SENTRY-9 pair lock: USDC→OKB")
+
+        # ── BALANCE-AWARE DIVERSITY ROUTING ─────────────────────────────────────
+        # When USDT0 is depleted, redirect OKB-buyers to USDC→OKB or OKB→USDT0 (profit-take).
+        # Prevents one token from being totally drained while others sit idle.
+        USDT0_LOW = 0.12   # below this USDT0 balance, stop spending it
+        OKB_RICH  = 0.012  # above this OKB balance, safe to profit-take 10%
+        if name in ("SILO-TRADER-1", "SILO-SUSTAINER-8"):
+            if to_tok.upper() == "OKB" and from_tok.upper() in ("USDT", "USDT0", "USD₮0", "USDTE"):
+                if usdt_balance < USDT0_LOW:
+                    if usdc_balance >= 0.08:
+                        # Route through USDC instead — fresh fuel
+                        from_tok = "USDC"
+                        logger.info("[act] %s — USDT0 low (%.4f) → routing USDC→OKB (usdc=%.4f)",
+                                    name, usdt_balance, usdc_balance)
+                    elif okb_live_bal >= OKB_RICH:
+                        # Profit-take a small slice of OKB to refuel USDT0
+                        from_tok, to_tok = "OKB", "USDT0"
+                        logger.info("[act] %s — USDT0 low (%.4f) → OKB→USDT0 profit-take (okb=%.6f)",
+                                    name, usdt_balance, okb_live_bal)
+                    else:
+                        logger.info("[act] %s — USDT0 low (%.4f) and no alt route available, holding",
+                                    name, usdt_balance)
+                        return {"outcome": "risk_hold", "reason": "USDT0 depleted — no alt route", "tx_hash": None}
 
         # ── OKB ACCUMULATION GUARD ────────────────────────────────────────────
         # Detect if this is a buyback (acquiring OKB with stable)
@@ -732,17 +779,30 @@ def act(agent_def: dict, decision: dict, heartbeat_id: str, observation: dict | 
             except (TypeError, ValueError):
                 pass
 
-            if from_tok.upper() in ("USDT", "USDT0", "USD₮0", "USDTE", "USDC") or \
+            if from_tok.upper() == "SILO":
+                # SILO profit-take — sell 10% of SILO position, min 1000 SILO
+                silo_to_sell = max(1000.0, silo_balance * 0.10)
+                safe_amount = str(round(silo_to_sell, 0))
+                logger.info("[act] %s — SILO→%s: selling %.0f SILO (silo_bal=%.0f)",
+                            name, to_tok, silo_to_sell, silo_balance)
+            elif from_tok.upper() in ("USDT", "USDT0", "USD₮0", "USDTE", "USDC") or \
                from_tok.startswith("0x"):
                 # Stablecoin or ERC-20 address → amount is in that token's units (USDT/USDC)
-                # Use agent-suggested amount if reasonable, else fallback to 5% of balance
-                max_spend = max(0.005, usdt_balance * 0.50)
+                # Use correct balance for the from-token
+                from_bal = usdc_balance if from_tok.upper() == "USDC" else usdt_balance
+                max_spend = max(0.005, from_bal * 0.50)
                 if agent_amount > 0:
                     safe_amount = str(round(min(agent_amount, max_spend), 4))
                 else:
-                    safe_amount = str(round(max(0.01, min(0.05, usdt_balance * 0.10)), 4))
-                logger.info("[act] %s — %s→%s: spending %s %s (usdt_bal=%.4f)",
-                            name, from_tok, to_tok, safe_amount, from_tok, usdt_balance)
+                    safe_amount = str(round(max(0.01, min(0.05, from_bal * 0.10)), 4))
+                logger.info("[act] %s — %s→%s: spending %s %s (bal=%.4f)",
+                            name, from_tok, to_tok, safe_amount, from_tok, from_bal)
+            elif from_tok.upper() == "OKB":
+                # OKB profit-take: sell small fixed slice (5% of live balance, min 0.0001)
+                okb_to_sell = round(max(0.0001, okb_live_bal * 0.05), 6)
+                safe_amount = str(okb_to_sell)
+                logger.info("[act] %s — OKB→%s: selling %.6f OKB (okb_bal=%.6f)",
+                            name, to_tok, okb_to_sell, okb_live_bal)
             else:
                 # OKB-denominated trade
                 safe_amount = str(_risk.get_trade_size())

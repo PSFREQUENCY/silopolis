@@ -1047,6 +1047,7 @@ export default function SilopolisPage() {
   const [classified, setClassified] = useState(false); // flicker on load
   const [feedHistory, setFeedHistory] = useState<TxHistoryItem[]>([]);
   const [timelineIdx, setTimelineIdx] = useState<number>(9999); // large default → always shows all nodes until data loads
+  const feedHistoryLenRef = useRef<number>(0); // track previous length to auto-advance only on new entries
   const [okbPrice, setOkbPrice] = useState<number>(0);
   const [okbBalance, setOkbBalance] = useState<number>(0);
   const [walletBal, setWalletBal] = useState<Record<string, number>>({});
@@ -1117,7 +1118,7 @@ export default function SilopolisPage() {
 
     // ── Phase 1: DB feed — fast (SQLite), set immediately so brain mesh shows now
     try {
-      const feedData = await fetch(`${API_BASE}/api/feed?limit=300`, opts)
+      const feedData = await fetch(`${API_BASE}/api/feed?limit=2000`, opts)
         .then(r => r.ok ? r.json() : null);
       const rawFeed: { ts: string; agent: string; action: string; tx_hash?: string | null; reasoning?: string }[] =
         (feedData?.feed ?? []).slice().reverse();
@@ -1131,7 +1132,11 @@ export default function SilopolisPage() {
           is_x402: f.agent === "SILO-SKILL-3" || (f.reasoning ?? "").toLowerCase().includes("x402"),
         }));
         setFeedHistory(feedItems);
-        setTimelineIdx(feedItems.length - 1);
+        // Only auto-advance to latest when new entries arrive (not on every refresh)
+        if (feedItems.length > feedHistoryLenRef.current) {
+          feedHistoryLenRef.current = feedItems.length;
+          setTimelineIdx(feedItems.length - 1);
+        }
       }
     } catch { /* keep existing */ }
 
@@ -1160,7 +1165,10 @@ export default function SilopolisPage() {
       setFeedHistory(prev => {
         const dbItems = prev.filter(f => !f.tx_hash || !confirmedHashes.has(f.tx_hash));
         const merged = [...proofItems, ...dbItems];
-        setTimelineIdx(merged.length - 1);
+        if (merged.length > feedHistoryLenRef.current) {
+          feedHistoryLenRef.current = merged.length;
+          setTimelineIdx(merged.length - 1);
+        }
         return merged;
       });
     } catch { /* keep existing feed */ }
