@@ -213,7 +213,7 @@ def _nim_generate(
     }
     # Retry up to 6 times on 429 with aggressive backoff — never fall back to Gemini on rate limit
     for attempt in range(6):
-        resp = httpx.post(f"{NIM_BASE}/chat/completions", json=payload, headers=headers, timeout=90.0)
+        resp = httpx.post(f"{NIM_BASE}/chat/completions", json=payload, headers=headers, timeout=20.0)
         if resp.status_code == 404:
             raise EnvironmentError(f"NIM model {NIM_MODEL!r} not found on cloud API (404).")
         if resp.status_code == 429:
@@ -314,9 +314,9 @@ class SwarmFiCognition:
             try:
                 response = _nim_generate(prompt=prompt, system=system, temperature=0.7, max_tokens=self.max_tokens)
             except Exception as e:
-                # NIM failed — fall back to Gemini
+                # NIM failed — fall back to Gemini Flash (always Flash in fallback for quota headroom)
                 emit(f"⚠ Primary channel congested — engaging backup route...")
-                gemini_model = PRO_MODEL if use_pro else FLASH_MODEL
+                gemini_model = FLASH_MODEL  # Flash has better quota than Pro; use_pro ignored in fallback
                 model = gemini_model
                 try:
                     response = _gemini_generate(
